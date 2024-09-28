@@ -1,0 +1,37 @@
+name = "LCEnzo"
+armor = 890
+shields = 1030
+ballistics = 352
+chemical = 71
+firepower = 858
+velocity = 357
+
+[[effects]]
+name = "Last Stand"
+trigger_condition = "combatant.armor == 0 and self.triggered == False"
+effect_func = "set_armor(1)"
+duration = 1
+
+[[effects]]
+name = "Shield Plates"
+trigger_condition = "combatant.shields == 0 and self.triggered == False"
+effect_func = "set_shields(1)"
+duration = 1
+
+[modifiers.attack_hit_chance_mod]
+Firepower = 56
+Chemical = 56
+Ballistic = 56
+
+[modifiers.defense_hit_chance_mod]
+Firepower = -19
+Chemical = -19
+Ballistic = -19
+
+[armor_modifiers]
+Ballistics = -60
+Chemical = -65  # 60 from armor, 5 from drones
+Firepower = -60
+
+# [shield_modifiers]
+# Firepower = -25

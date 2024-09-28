@@ -1,0 +1,7 @@
+name = "Shinigami"
+armor = 2500
+shields = 2500
+ballistics = 800
+chemical = 0
+firepower = 1800
+velocity = 200
