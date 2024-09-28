@@ -1,11 +1,12 @@
 #!python
 # Mechs vs Monsters CYOA	https://docs.google.com/spreadsheets/d/1EtHtPwQyUKCrR4irR_aebse2ZSU6UZWsZOiLbhThnsY/edit?gid=0#gid=0
 
-from random import randint
-from pprint import pprint
-from pydantic import BaseModel
-from typing import Any, List, Dict, Callable, Union, LiteralString
 import enum
+from pprint import pprint
+from random import randint
+from typing import Any, Callable, Dict, List, LiteralString, Union
+
+from pydantic import BaseModel
 
 
 class AttackType(enum.Enum):
@@ -53,12 +54,36 @@ class Combatant(BaseModel):
             self.armor = max(0, self.armor - damage)
 
         return damage
-
+    
     def modify_damage(self, damage: int, damage_type: AttackType) -> int:
         """Apply armor/shield reductions or buffs."""
+        if damage_type == AttackType.FIREPOWER:
+            if self.shields > 0:
+                damage *= 2
+            else:
+                damage = damage // 2
+        elif damage_type == AttackType.CHEMICAL:
+            if self.shields > 0:
+                damage = damage // 2
+            else:
+                damage *= 2
+
         if damage_type in self.armor_modifiers:
             damage += self.armor_modifiers[damage_type]
+
         return max(0, damage)
+    
+    def get_damage(self, damage_type: AttackType) -> int:
+        match damage_type:
+            case AttackType.FIREPOWER:
+                return self.firepower
+            case AttackType.CHEMICAL:
+                return self.chemical
+            case AttackType.BALLISTIC:
+                return self.ballistics
+    
+    def is_dead(self) -> bool:
+        return self.armor <= 0
 
 
 class CombatEngine(BaseModel):
@@ -74,6 +99,9 @@ class CombatEngine(BaseModel):
         # Determine order of attacks based on velocity
         total_velocity_a = self.combatant_a.velocity + randint(1, 1000)
         total_velocity_b = self.combatant_b.velocity + randint(1, 1000)
+
+        self.add_log(f"{self.combatant_a.name} has total velocity {total_velocity_a} vs " + 
+                     f" {self.combatant_b.name} has {total_velocity_b}")
 
         if total_velocity_a >= total_velocity_b:
             attacker, defender = self.combatant_a, self.combatant_b
@@ -96,11 +124,11 @@ class CombatEngine(BaseModel):
 
         self.current_turn += 1
 
-    def process_turn(self, attacker: Combatant, defender: Combatant, att_type):
+    def process_turn(self, attacker: Combatant, defender: Combatant, att_type: AttackType):
         # Roll for hit success based on velocity and apply damage
         hit_roll = self.calculate_hit(attacker, defender, att_type)
         if hit_roll:
-            damage = self.calculate_damage(attacker, defender)
+            damage = self.calculate_damage(attacker, defender, att_type)
             defender.apply_damage(damage, att_type)
 
     def calculate_hit(self, attacker: Combatant, defender: Combatant, att_type: AttackType) -> bool:
@@ -108,15 +136,17 @@ class CombatEngine(BaseModel):
         base_hit = randint(0, 1000)
         hit_chance = (attacker.velocity - defender.velocity) // 2
 
-        hit_chance += attacker.modifiers.get("attack_hit_chance_mod", {}).get(att_type, 0)
-        hit_chance -= defender.modifiers.get("defense_hit_chance_mod", {}).get(att_type, 0)
+        att_mod = attacker.modifiers.get("attack_hit_chance_mod", {}).get(att_type, 0)
+        def_mod = defender.modifiers.get("defense_hit_chance_mod", {}).get(att_type, 0)
 
-        hit_roll: bool = base_hit >= 500 - hit_chance
+        hit_roll: bool = base_hit + att_mod - def_mod >= 500 - hit_chance
+        self.add_log(f"Attack ({attacker.name}) calc hit: {(base_hit, hit_chance, att_mod, def_mod) = } -> {hit_roll = }")
+
         return hit_roll
 
-    def calculate_damage(self, attacker: Combatant, defender: Combatant) -> int:
+    def calculate_damage(self, attacker: Combatant, defender: Combatant, att_type: AttackType) -> int:
         """Calculate base damage and any modifiers."""
-        base_damage = attacker.firepower
+        base_damage = attacker.get_damage(att_type)
         return base_damage
 
     def log_round(self):
