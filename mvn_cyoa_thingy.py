@@ -4,16 +4,25 @@
 from random import randint
 from pprint import pprint
 from pydantic import BaseModel
-from typing import List, Dict, Callable
+from typing import Any, List, Dict, Callable, Union, LiteralString
+import enum
+
+
+class AttackType(enum.Enum):
+    FIREPOWER = "Firepower"
+    CHEMICAL = "Chemical"
+    BALLISTIC = "Ballistic"
+
 
 class Effect(BaseModel):
     name: str
     trigger_condition: str
     effect_func: Callable
 
-    def apply(self, combatant: 'Combatant'):
+    def apply(self, combatant: "Combatant"):
         """Apply the effect to a combatant"""
         self.effect_func(combatant)
+
 
 class Combatant(BaseModel):
     name: str
@@ -23,11 +32,12 @@ class Combatant(BaseModel):
     chemical: int
     firepower: int
     velocity: int
-    effects: list['Effect']
-    armor_modifiers: Dict[str, int]
-    shield_modifiers: Dict[str, int]
+    effects: list["Effect"]
+    armor_modifiers: Dict[AttackType, int]
+    shield_modifiers: Dict[AttackType, int]
+    modifiers: Dict[str, Any]
 
-    def apply_damage(self, damage: int, damage_type: str) -> int:
+    def apply_damage(self, damage: int, damage_type: AttackType) -> int:
         """Apply damage based on shields/armor and return the actual applied damage"""
         damage = self.modify_damage(damage, damage_type)
 
@@ -44,16 +54,21 @@ class Combatant(BaseModel):
 
         return damage
 
-    def modify_damage(self, damage: int, damage_type: str) -> int:
+    def modify_damage(self, damage: int, damage_type: AttackType) -> int:
         """Apply armor/shield reductions or buffs."""
         if damage_type in self.armor_modifiers:
             damage += self.armor_modifiers[damage_type]
         return max(0, damage)
 
+
 class CombatEngine(BaseModel):
     combatant_a: Combatant
     combatant_b: Combatant
-    round_log: list
+    # Logs yet to be printed
+    new_logs: list[str]
+    # Logs printed already
+    old_logs: list[str]
+    current_turn: int = 1
 
     def simulate_round(self):
         # Determine order of attacks based on velocity
@@ -66,29 +81,37 @@ class CombatEngine(BaseModel):
             attacker, defender = self.combatant_b, self.combatant_a
 
         # Process turn
-        self.process_turn(attacker, defender)
-        self.process_turn(defender, attacker)
+        self.process_turn(attacker, defender, AttackType.FIREPOWER)
+        self.log_round()
 
+        self.process_turn(attacker, defender, AttackType.BALLISTIC)
+        self.log_round()
+
+        self.process_turn(attacker, defender, AttackType.CHEMICAL)
         self.log_round()
 
         # Offer feedback option to user
         if self.get_user_feedback():
             self.modify_round()
 
-    def process_turn(self, attacker: Combatant, defender: Combatant):
+        self.current_turn += 1
+
+    def process_turn(self, attacker: Combatant, defender: Combatant, att_type):
         # Roll for hit success based on velocity and apply damage
-        hit_roll = self.calculate_hit(attacker, defender)
+        hit_roll = self.calculate_hit(attacker, defender, att_type)
         if hit_roll:
             damage = self.calculate_damage(attacker, defender)
-            defender.apply_damage(damage, "Firepower")  # This is just for firepower, similar logic for others
+            defender.apply_damage(damage, att_type)
 
-    def calculate_hit(self, attacker: Combatant, defender: Combatant) -> bool:
+    def calculate_hit(self, attacker: Combatant, defender: Combatant, att_type: AttackType) -> bool:
         """Calculate whether an attack hits, taking into account modifiers."""
         base_hit = randint(0, 1000)
-        hit_chance = (attacker.velocity - defender.velocity) // 2  # Base formula
-        # Apply hit modifiers (e.g., Pixelation, Steam Vents)
-        hit_chance += sum([56])  # Placeholder for E-1337 etc.
-        hit_roll = base_hit >= 500 - hit_chance
+        hit_chance = (attacker.velocity - defender.velocity) // 2
+
+        hit_chance += attacker.modifiers.get("attack_hit_chance_mod", {}).get(att_type, 0)
+        hit_chance -= defender.modifiers.get("defense_hit_chance_mod", {}).get(att_type, 0)
+
+        hit_roll: bool = base_hit >= 500 - hit_chance
         return hit_roll
 
     def calculate_damage(self, attacker: Combatant, defender: Combatant) -> int:
@@ -98,13 +121,19 @@ class CombatEngine(BaseModel):
 
     def log_round(self):
         """Log results for each round."""
-        # For simplicity, this just prints but can be written to a log file.
-        print(f"{self.combatant_a.name} - Shields: {self.combatant_a.shields}, Armor: {self.combatant_a.armor}")
-        print(f"{self.combatant_b.name} - Shields: {self.combatant_b.shields}, Armor: {self.combatant_b.armor}")
+        for log in self.new_logs:
+            print(log)
+            self.old_logs.append(log)
+
+        self.new_logs.clear()
+
+    def add_log(self, msg: str):
+        prefix = f"Turn {self.current_turn:3d}: "
+        self.new_logs.append(prefix + msg)
 
     def get_user_feedback(self) -> bool:
         """Ask if user wants to modify the result."""
-        return input("Modify results? (y/n) ").strip().lower() == 'y'
+        return input("Modify results? (y/n) ").strip().lower() == "y"
 
     def modify_round(self):
         """Allow user to modify combat results."""
@@ -117,18 +146,11 @@ class CombatEngine(BaseModel):
         else:
             setattr(self.combatant_b, stat, new_value)
 
-def do_combat_round(a: Combatant, b: Combatant) -> tuple[Combatant, Combatant]:
-    velocity_a = a.velocity + randint(1, 1000)
-    velocity_b = a.velocity + randint(1, 1000)
 
-    # 3 attacks, in order: firepower, ballistics, chemical
-    for i in range(3):
-        
+def main():
+    raise NotImplementedError()
 
-    return a, b
 
-def main()
-
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
     print("Exiting")

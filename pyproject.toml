@@ -1,0 +1,62 @@
+[tool.black]
+exclude = '''
+(
+  /venv/ 
+  | /.venv/
+  | /alembic/
+)
+'''
+line-length = 120
+
+[tool.ruff]
+line-length = 120
+lint.select = [
+	"E",		# pycodestyle
+	"F",		# pyflakes
+	"UP",		# pyupgrade
+	"I",		# isort
+	"N",		# pep8-naming
+	"ASYNC",	# flake8-async
+	"B",		# flake8-bugbear
+	"C4",		# flake8-comprehensions
+	"DTZ",		# flake8-datetimez
+	"DJ",		# flate8-django
+	"RET",		# flake8-return
+	"SIM",		# flake8-simplify
+	"NPY",		# numpy
+]
+lint.ignore = ["RET501", "RET504", "UP015", "RET505", "F841"]
+exclude = [
+	"**/node_modules",
+	"**/__pycache__",
+	"**/experimental",
+	"**/typestubs",
+	"**/migrations",
+	"venv",
+	".venv",
+	"alembic"
+]
+
+[tool.ruff.lint.flake8-bugbear]
+extend-immutable-calls = ["fastapi.Depends", "fastapi.params.Depends", "fastapi.Query", "fastapi.params.Query"]
+
+[tool.ruff.lint.pep8-naming]
+# Allow Pydantic's `@validator` decorator to trigger class method treatment.
+classmethod-decorators = ["classmethod", "pydantic.validator"]
+
+[tool.mypy]
+plugins = ["pydantic.mypy", "sqlalchemy.ext.mypy.plugin"]
+exclude=["migrations", "venv", ".venv", "alembic"]
+
+[tool.pytest.ini_options]
+addopts = """
+    --cov=models
+    --cov=routers
+    --cov=schemas
+    --cov=services
+    --cov-report=xml:coverage.xml
+    --cov-report=term
+"""
+testpaths = [
+    "tests"
+]
