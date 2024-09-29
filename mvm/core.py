@@ -315,7 +315,7 @@ class BattleSimulator(BaseModel):
     def load_terrain(self, terrain: Terrain):
         self.terrain = terrain.model_copy()
 
-    def view_combatants(self):
+    def view_combatants_and_terrain(self):
         if not self.combatant_a or not self.combatant_b:
             print("Please load both combatants first.")
             return
@@ -326,6 +326,12 @@ class BattleSimulator(BaseModel):
             f"--- Combatant B: {self.combatant_b.name} ---\n"
             f"{self._format_combatant_stats(self.combatant_b)}"
         )
+
+        if self.terrain:
+            print(f"Terrain: {self.terrain.name}")
+            print(f"Description: {self.terrain.description}")
+        else:
+            print("No terrain loaded.")
 
     def _format_combatant_stats(self, combatant: Combatant) -> str:
         return (

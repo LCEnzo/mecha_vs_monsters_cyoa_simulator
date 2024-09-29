@@ -32,3 +32,7 @@ notes.md
 
 # Env
 .env
+
+# Line profiler
+profile_output*.txt
+profile_output*.lprof

@@ -1,13 +1,37 @@
-#!python
+from typing import Dict, Generic, TypeVar
+
+from pydantic import BaseModel
 
 from mvm.combatants import combatants
-from mvm.core import BattleConfig, BattleSimulator
+from mvm.core import BattleConfig, BattleSimulator, Combatant, Terrain
 from mvm.terrains import terrains
 from utils.combat_logging import logger
 from utils.settings import settings  # noqa: F401
 
+T = TypeVar('T', bound=BaseModel)
 
-def run_config_battles(battle_config: BattleConfig, simulator: BattleSimulator):
+class NamedItem(BaseModel, Generic[T]):
+    name: str
+    item: T
+
+def select_from_list(items: Dict[str, T], item_type: str) -> T:
+    named_items: list[NamedItem] = [NamedItem(name=name, item=item) for name, item in items.items()]
+    
+    print(f"\nAvailable {item_type}s:")
+    for i, item in enumerate(named_items):
+        print(f"{i+1}. {item.name}")
+    
+    while True:
+        choice = input(f"\nSelect a {item_type} (enter name or number): ").strip()
+        if choice in items:
+            return items[choice]
+        elif choice.isdigit() and 1 <= int(choice) <= len(named_items):
+            return named_items[int(choice) - 1].item
+        else:
+            print("Invalid selection. Please try again.")
+
+
+def run_config_battles(battle_config: BattleConfig, simulator: BattleSimulator) -> None:
     for battle in battle_config.battles:
         combatant_a = combatants[battle.combatant_a]
         combatant_b = combatants[battle.combatant_b]
@@ -21,25 +45,19 @@ def run_config_battles(battle_config: BattleConfig, simulator: BattleSimulator):
         print("")
 
 
-def main():
+def main() -> None:
     simulator = BattleSimulator()
     battle_config = BattleConfig.load_battle_config("battle_config.toml")
 
     if battle_config.battles:
         run_config_battles(battle_config, simulator)
 
-    # file_a = "combatant_a.toml"
-    # file_b = "combatant_b.toml"
-    # terrain_file = "terrain.toml"
-    # simulator.load_combatants_via_file(file_a, file_b)
-    # simulator.load_terrain_via_file(terrain_file)
-
     while True:
         print("\n--- Mech vs Monster Battle Simulator ---")
         print("1. Load combatants")
         print("2. Load terrain")
         print("3. View combatants")
-        print("4. View terrain")
+        print("4. /")
         print("5. Modify combatant")
         print("6. Start battle")
         print("7. Simulate round")
@@ -51,26 +69,14 @@ def main():
         print("")
 
         if choice == "1":
-            file_a = input("Enter file path for combatant A: ")
-            if not file_a:
-                file_a = "combatant_a.toml"
-            file_b = input("Enter file path for combatant B: ")
-            if not file_b:
-                file_b = "combatant_b.toml"
-            simulator.load_combatants_via_file(file_a, file_b)
+            combatant_a: Combatant = select_from_list(combatants, "combatant")
+            combatant_b: Combatant = select_from_list(combatants, "combatant")
+            simulator.load_combatants(combatant_a, combatant_b)
         elif choice == "2":
-            terrain_file = input("Enter file path for terrain: ")
-            if not terrain_file:
-                terrain_file = "terrain.toml"
-            simulator.load_terrain_via_file(terrain_file)
+            terrain: Terrain = select_from_list(terrains, "terrain")
+            simulator.load_terrain(terrain)
         elif choice == "3":
-            simulator.view_combatants()
-        elif choice == "4":
-            if simulator.terrain:
-                print(f"Terrain: {simulator.terrain.name}")
-                print(f"Description: {simulator.terrain.description}")
-            else:
-                print("No terrain loaded.")
+            simulator.view_combatants_and_terrain()
         elif choice == "5":
             side = input("Which combatant to modify? (A/B): ")
             attribute = input("Enter attribute to modify: ")
