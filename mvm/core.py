@@ -9,7 +9,7 @@ from typing import Callable, Self, TypeVarTuple, Unpack
 
 import tomli
 import tomli_w
-from pydantic import ConfigDict, BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from termcolor import colored
 
 from utils.combat_logging import logger
@@ -29,7 +29,7 @@ class Effect(BaseModel):
     trigger_condition: Callable[[Self | Effect, Combatant, Combatant, bool, AttackType | None, Unpack[Ts]], bool]
     effect_func: Callable[[Self | Effect, Combatant, Combatant, Unpack[Ts]], None]
     triggered: bool = False
-    trigger_count: int = 0
+    trigger_count: int = Field(..., ge=0)
 
     def apply(
         self,
@@ -56,12 +56,12 @@ class Effect(BaseModel):
 
 class Combatant(BaseModel):
     name: str
-    armor: int
-    shields: int
-    ballistics: int
-    chemical: int
-    firepower: int
-    velocity: int
+    armor: int = Field(..., ge=0)
+    shields: int = Field(..., ge=0)
+    ballistics: int = Field(..., ge=0)
+    chemical: int = Field(..., ge=0)
+    firepower: int = Field(..., ge=0)
+    velocity: int = Field(..., ge=0)
     effects: list[Effect] = Field(default_factory=list)
     armor_modifiers: dict[AttackType, int] = Field(default_factory=dict)
     shield_modifiers: dict[AttackType, int] = Field(default_factory=dict)
@@ -77,6 +77,13 @@ class Combatant(BaseModel):
     on_damage_taken_effects: list[Callable[[Combatant, int, int, int, AttackType], None]] = Field(default_factory=list)
     on_hit_roll_effects: list[Callable[[Combatant, int, AttackType], None]] = Field(default_factory=list)
     on_attack_result_effects: list[Callable[[Combatant, bool, AttackType], None]] = Field(default_factory=list)
+
+    @field_validator('armor', 'shields', 'ballistics', 'chemical', 'firepower', 'velocity')
+    @classmethod
+    def check_positive(cls, v):
+        if v < 0:
+            raise ValueError("Value must be non-negative")
+        return v
 
     def on_damage_taken(self, damage: int, armor_dmg: int, shields_dmg: int, damage_type: AttackType) -> None:
         for effect in self.on_damage_taken_effects:
@@ -168,8 +175,8 @@ class Terrain(BaseModel):
 class CombatEngine(BaseModel):
     combatant_a: Combatant
     combatant_b: Combatant
-    current_round: int = 1
     terrain: Terrain | None = None
+    current_round: int = Field(ge=0, default=1)
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     def start_battle(self):
@@ -377,9 +384,9 @@ class BattleSimulator(BaseModel):
         try:
             for _ in range(num_battles):
                 self.combat_engine = CombatEngine(
-                    combatant_a=self.combatant_a.copy(deep=True),
-                    combatant_b=self.combatant_b.copy(deep=True),
-                    terrain=self.terrain.copy(deep=True) if self.terrain else self.terrain,
+                    combatant_a=self.combatant_a.model_copy(deep=True),
+                    combatant_b=self.combatant_b.model_copy(deep=True),
+                    terrain=self.terrain.model_copy(deep=True) if self.terrain else self.terrain,
                 )
                 while not self.combat_engine.is_battle_over():
                     self.combat_engine.simulate_round()
