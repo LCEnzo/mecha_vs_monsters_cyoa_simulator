@@ -113,6 +113,10 @@ class Combatant(BaseModel):
 
     def is_dead(self) -> bool:
         return self.armor <= 0
+    
+    def apply_effects(self):
+        for effect in self.effects:
+            effect.apply(self)
 
 
 class CombatEngine(BaseModel):
@@ -122,6 +126,12 @@ class CombatEngine(BaseModel):
 
     class Config:
         arbitrary_types_allowed = True
+
+    def start_battle(self):
+        logger.info("Battle started.")
+        while not self.is_battle_over():
+            self.simulate_round()
+        logger.info(self.get_battle_result())
 
     def simulate_round(self) -> None:
         total_velocity_a = self.combatant_a.velocity + randint(1, 1000)
@@ -175,6 +185,17 @@ class CombatEngine(BaseModel):
 
     def calculate_damage(self, attacker: Combatant, defender: Combatant, att_type: AttackType) -> int:
         return attacker.get_damage(att_type)
+
+    def is_battle_over(self) -> bool:
+        return self.combatant_a.is_dead() or self.combatant_b.is_dead()
+
+    def get_battle_result(self) -> str:
+        if self.combatant_a.is_dead():
+            return f"Battle ended. Winner: {self.combatant_b.name}"
+        elif self.combatant_b.is_dead():
+            return f"Battle ended. Winner: {self.combatant_a.name}"
+        else:
+            return "Battle is still ongoing."
 
     def get_battle_status(self) -> str:
         return (
@@ -238,7 +259,7 @@ class BattleSimulator(BaseModel):
         self.combat_engine = CombatEngine(
             combatant_a=self.combatant_a, combatant_b=self.combatant_b, logger=logger
         )
-        logger.info("Battle started. Use 'simulate_round' to progress the battle.")
+        self.combat_engine.start_battle()
 
     def simulate_round(self):
         if not self.combat_engine:
@@ -250,13 +271,7 @@ class BattleSimulator(BaseModel):
     def get_battle_result(self) -> str:
         if not self.combat_engine:
             return "No battle in progress."
-
-        if self.combat_engine.combatant_a.is_dead():
-            return f"Battle ended. Winner: {self.combat_engine.combatant_b.name}"
-        elif self.combat_engine.combatant_b.is_dead():
-            return f"Battle ended. Winner: {self.combat_engine.combatant_a.name}"
-        else:
-            return "Battle is still ongoing."
+        return self.combat_engine.get_battle_result()
 
 
 def load_combatant(file_path: Union[str, Path]) -> Combatant:

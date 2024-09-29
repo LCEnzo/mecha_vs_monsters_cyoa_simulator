@@ -8,14 +8,14 @@ velocity = 357
 
 [[effects]]
 name = "Last Stand"
-trigger_condition = "combatant.armor == 0 and self.triggered == False"
-effect_func = "set_armor(1)"
+trigger_condition = "combatant.armor == 0 and self.trigger_count == 0"
+effect_func = "combatant.armor = 1"
 duration = 1
 
 [[effects]]
 name = "Shield Plates"
-trigger_condition = "combatant.shields == 0 and self.triggered == False"
-effect_func = "set_shields(1)"
+trigger_condition = "combatant.shields == 0 and self.trigger_count == 0"
+effect_func = "combatant.shields = 1"
 duration = 1
 
 [modifiers.attack_hit_chance_mod]
