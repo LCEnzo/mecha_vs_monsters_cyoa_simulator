@@ -12,7 +12,7 @@ import tomli_w
 from pydantic import BaseModel, Field
 from termcolor import colored
 
-from combat_logging import logger
+from utils.combat_logging import logger
 
 
 class AttackType(str, enum.Enum):

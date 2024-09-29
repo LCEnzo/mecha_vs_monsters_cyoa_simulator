@@ -1,5 +1,5 @@
-from combat_logging import logger
-from core import AttackType, Combatant, CombatEngine, Terrain
+from mvm.core import AttackType, Combatant, CombatEngine, Terrain
+from utils.combat_logging import logger
 
 
 # Universal

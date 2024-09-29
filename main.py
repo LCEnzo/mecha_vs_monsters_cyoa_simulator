@@ -1,9 +1,9 @@
 #!python
 
-from combat_logging import logger
-from combatants import combatants
-from core import BattleConfig, BattleSimulator
-from terrains import terrains
+from mvm.combatants import combatants
+from mvm.core import BattleConfig, BattleSimulator
+from mvm.terrains import terrains
+from utils.combat_logging import logger
 
 
 def run_config_battles(battle_config: BattleConfig, simulator: BattleSimulator):

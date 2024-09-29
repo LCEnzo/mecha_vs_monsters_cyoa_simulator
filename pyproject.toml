@@ -52,14 +52,6 @@ plugins = [
 exclude=["migrations", "venv", ".venv", "alembic"]
 
 [tool.pytest.ini_options]
-addopts = """
-    --cov=models
-    --cov=routers
-    --cov=schemas
-    --cov=services
-    --cov-report=xml:coverage.xml
-    --cov-report=term
-"""
 testpaths = [
     "tests"
 ]

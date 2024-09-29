@@ -1,5 +1,5 @@
-from combat_logging import logger
-from core import AttackType, Combatant, Effect
+from mvm.core import AttackType, Combatant, Effect
+from utils.combat_logging import logger
 
 
 # Shinigami
@@ -90,7 +90,7 @@ def riposta_condition(effect_info: Effect, self: Combatant, other: Combatant, hi
 
 def riposta_effect(effect_info: Effect, self: Combatant, other: Combatant):
     self.armor += 25
-    self.sheilds += 25
+    self.shields += 25
 
 
 lcenzo = Combatant(
