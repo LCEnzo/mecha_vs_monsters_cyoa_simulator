@@ -3,13 +3,40 @@
 
 import enum
 import logging
+import traceback
 from pathlib import Path
 from random import randint
-from typing import Callable, Dict, List, Union
+from typing import Union
 
 import tomli
 import tomli_w
 from pydantic import BaseModel, Field
+
+
+## LOGGING SETUP
+def setup_logging() -> logging.Logger:
+    logger = logging.getLogger(__name__)
+    logger.setLevel(logging.DEBUG)
+
+    file_handler = logging.FileHandler("combat.log")
+    file_handler.setLevel(logging.DEBUG)
+
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.INFO)
+
+    formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+    file_handler.setFormatter(formatter)
+    console_handler.setFormatter(formatter)
+
+    logger.addHandler(file_handler)
+    logger.addHandler(console_handler)
+
+    return logger
+
+
+logger = setup_logging()
+
+## NORMAL CODE
 
 
 class AttackType(str, enum.Enum):
@@ -24,12 +51,17 @@ class Effect(BaseModel):
     effect_func: str  # This will be a string representation of a function
     duration: int = -1  # -1 for permanent effects
     triggered: bool = False
+    trigger_count: int = 0
 
     def apply(self, combatant: "Combatant") -> None:
-        # In a real implementation, you'd need a safe way to evaluate the effect_func string
-        # For now, we'll just print what would happen
-        print(f"Applying effect {self.name} to {combatant.name}: {self.effect_func}")
-        self.triggered = True
+        try:
+            if eval(self.trigger_condition):
+                eval(f"combatant.{self.effect_func}")
+                self.triggered = True
+                self.trigger_count += 1
+        except Exception as e:
+            traceback.print_exc()
+            logger.error(f"Effect {self.name} borked, exception {e}")
 
 
 class Combatant(BaseModel):
@@ -50,14 +82,8 @@ class Combatant(BaseModel):
         damage = self.modify_damage(damage, damage_type)
 
         if self.shields > 0:
-            if damage >= self.shields:
-                damage -= self.shields
-                self.shields = 0
-            else:
-                self.shields -= damage
-                damage = 0
-
-        if damage > 0:
+            self.shields = max(0, self.shields - damage)
+        else:
             self.armor = max(0, self.armor - damage)
 
         return damage
@@ -92,8 +118,7 @@ class Combatant(BaseModel):
 class CombatEngine(BaseModel):
     combatant_a: Combatant
     combatant_b: Combatant
-    current_turn: int = 1
-    logger: logging.Logger = Field(default_factory=lambda: logging.getLogger(__name__))
+    current_round: int = 1
 
     class Config:
         arbitrary_types_allowed = True
@@ -102,30 +127,36 @@ class CombatEngine(BaseModel):
         total_velocity_a = self.combatant_a.velocity + randint(1, 1000)
         total_velocity_b = self.combatant_b.velocity + randint(1, 1000)
 
-        self.logger.info(
-            f"{self.combatant_a.name} has total velocity {total_velocity_a} vs "
+        logger.info(
+            f"Round {self.current_round}: {self.combatant_a.name} has total velocity {total_velocity_a} vs "
             f"{self.combatant_b.name} has {total_velocity_b}"
         )
 
         if total_velocity_a >= total_velocity_b:
-            attacker, defender = self.combatant_a, self.combatant_b
+            first, second = (self.combatant_a, self.combatant_b)
         else:
-            attacker, defender = self.combatant_b, self.combatant_a
+            first, second = (self.combatant_b, self.combatant_a)
 
+        self.process_turn(first, second)
+        if not second.is_dead():
+            self.process_turn(second, first)
+
+        self.current_round += 1
+
+    def process_turn(self, attacker: Combatant, defender: Combatant):
         for attack_type in AttackType:
-            self.process_turn(attacker, defender, attack_type)
+            if defender.is_dead():
+                break
+            self.process_attack(attacker, defender, attack_type)
 
-        self.current_turn += 1
-
-    def process_turn(self, attacker: Combatant, defender: Combatant, att_type: AttackType):
-        # Roll for hit success based on velocity and apply damage
+    def process_attack(self, attacker: Combatant, defender: Combatant, att_type: AttackType):
         hit_roll = self.calculate_hit(attacker, defender, att_type)
         if hit_roll:
             damage = self.calculate_damage(attacker, defender, att_type)
             applied_damage = defender.apply_damage(damage, att_type)
-            self.logger.info(f"{attacker.name} hits {defender.name} with {att_type.value} for {applied_damage} damage")
+            logger.info(f"{attacker.name} hits {defender.name} with {att_type.value} for {applied_damage} damage")
         else:
-            self.logger.info(f"{attacker.name} misses {defender.name} with {att_type.value}")
+            logger.info(f"{attacker.name} misses {defender.name} with {att_type.value}")
 
     def calculate_hit(self, attacker: Combatant, defender: Combatant, att_type: AttackType) -> bool:
         """Calculate whether an attack hits, taking into account modifiers."""
@@ -136,31 +167,96 @@ class CombatEngine(BaseModel):
         def_mod = defender.modifiers.get("defense_hit_chance_mod", {}).get(att_type.value, 0)
 
         hit_roll = base_hit + att_mod - def_mod >= 500 - hit_chance
-        self.logger.debug(
+        logger.debug(
             f"Attack ({attacker.name}) calc hit: {(base_hit, hit_chance, att_mod, def_mod) = } -> {hit_roll = }"
         )
 
         return hit_roll
 
     def calculate_damage(self, attacker: Combatant, defender: Combatant, att_type: AttackType) -> int:
-        """Calculate base damage and any modifiers."""
-        base_damage = attacker.get_damage(att_type)
-        return base_damage
+        return attacker.get_damage(att_type)
 
-    def get_user_feedback(self) -> bool:
-        """Ask if user wants to modify the result."""
-        return input("Modify results? (y/n) ").strip().lower() == "y"
+    def get_battle_status(self) -> str:
+        return (
+            f"{self.combatant_a.name} - Armor: {self.combatant_a.armor}, Shields: {self.combatant_a.shields}\n"
+            f"{self.combatant_b.name} - Armor: {self.combatant_b.armor}, Shields: {self.combatant_b.shields}"
+        )
 
-    def modify_round(self):
-        """Allow user to modify combat results."""
-        combatant = input("Which combatant to modify? (A/B) ").strip().lower()
-        stat = input("Which stat? (shields/armor/firepower) ").strip().lower()
-        new_value = int(input(f"New value for {stat}? "))
 
-        if combatant == "a":
-            setattr(self.combatant_a, stat, new_value)
+class BattleSimulator(BaseModel):
+    combatant_a: Combatant | None = None
+    combatant_b: Combatant | None = None
+    combat_engine: CombatEngine | None = None
+
+    def load_combatants(self, file_path_a: str, file_path_b: str):
+        try:
+            self.combatant_a = load_combatant(file_path_a)
+            self.combatant_b = load_combatant(file_path_b)
+            logger.info(f"Loaded {self.combatant_a.name} as combatant A")
+            logger.info(f"Loaded {self.combatant_b.name} as combatant B")
+        except Exception as e:
+            logger.error(f"Error loading combatants: {e}")
+
+    def view_combatants(self):
+        if not self.combatant_a or not self.combatant_b:
+            print("Please load both combatants first.")
+            return
+
+        print(
+            f"--- Combatant A: {self.combatant_a.name} ---\n"
+            f"{self._format_combatant_stats(self.combatant_a)}\n\n"
+            f"--- Combatant B: {self.combatant_b.name} ---\n"
+            f"{self._format_combatant_stats(self.combatant_b)}"
+        )
+
+    def _format_combatant_stats(self, combatant: Combatant) -> str:
+        return (
+            f"Armor: {combatant.armor}\n"
+            f"Shields: {combatant.shields}\n"
+            f"Ballistics: {combatant.ballistics}\n"
+            f"Chemical: {combatant.chemical}\n"
+            f"Firepower: {combatant.firepower}\n"
+            f"Velocity: {combatant.velocity}\n"
+            f"Effects: {', '.join(effect.name for effect in combatant.effects)}"
+        )
+
+    def modify_combatant(self, side: str, attribute: str, new_value: int):
+        combatant = self.combatant_a if side.lower() == "a" else self.combatant_b
+        if not combatant:
+            logger.warning(f"Combatant {side.upper()} not loaded.")
+
+        if attribute not in ["armor", "shields", "ballistics", "chemical", "firepower", "velocity"]:
+            logger.warning("Invalid attribute.")
+
+        setattr(combatant, attribute, new_value)
+        logger.info(f"Updated {attribute} to {new_value} for {combatant.name}")
+
+    def start_battle(self):
+        if not self.combatant_a or not self.combatant_b:
+            logger.warning("Please load both combatants before starting a battle.")
+
+        self.combat_engine = CombatEngine(
+            combatant_a=self.combatant_a, combatant_b=self.combatant_b, logger=logger
+        )
+        logger.info("Battle started. Use 'simulate_round' to progress the battle.")
+
+    def simulate_round(self):
+        if not self.combat_engine:
+            logger.warning("Please start the battle first.")
+
+        self.combat_engine.simulate_round()
+        logger.info(self.combat_engine.get_battle_status())
+
+    def get_battle_result(self) -> str:
+        if not self.combat_engine:
+            return "No battle in progress."
+
+        if self.combat_engine.combatant_a.is_dead():
+            return f"Battle ended. Winner: {self.combat_engine.combatant_b.name}"
+        elif self.combat_engine.combatant_b.is_dead():
+            return f"Battle ended. Winner: {self.combat_engine.combatant_a.name}"
         else:
-            setattr(self.combatant_b, stat, new_value)
+            return "Battle is still ongoing."
 
 
 def load_combatant(file_path: Union[str, Path]) -> Combatant:
@@ -170,143 +266,53 @@ def load_combatant(file_path: Union[str, Path]) -> Combatant:
 
 
 def save_combatant(combatant: Combatant, file_path: Union[str, Path]) -> None:
-    with open(file_path, "w") as f:
+    with open(file_path, "wb") as f:
         tomli_w.dump(combatant.dict(), f)
 
 
-def setup_logging() -> logging.Logger:
-    logger = logging.getLogger(__name__)
-    logger.setLevel(logging.DEBUG)
+def main():
+    simulator = BattleSimulator()
 
-    file_handler = logging.FileHandler("combat.log")
-    file_handler.setLevel(logging.DEBUG)
-
-    console_handler = logging.StreamHandler()
-    console_handler.setLevel(logging.INFO)
-
-    formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-    file_handler.setFormatter(formatter)
-    console_handler.setFormatter(formatter)
-
-    logger.addHandler(file_handler)
-    logger.addHandler(console_handler)
-
-    return logger
-
-
-class BattleSimulator:
-    def __init__(self):
-        self.logger = setup_logging()
-        self.combatants: Dict[str, Combatant] = {}
-        self.combat_engine: Union[CombatEngine, None] = None
-
-    def run(self):
-        while True:
-            self.display_main_menu()
-            choice = input("Enter your choice: ").strip().lower()
-            if choice == '1':
-                self.load_combatants()
-            elif choice == '2':
-                self.view_combatants()
-            elif choice == '3':
-                self.modify_combatant()
-            elif choice == '4':
-                self.start_battle()
-            elif choice == '5':
-                print("Exiting the Battle Simulator. Goodbye!")
-                break
-            else:
-                print("Invalid choice. Please try again.")
-
-    def display_main_menu(self):
+    while True:
         print("\n--- Mech vs Monster Battle Simulator ---")
         print("1. Load combatants")
         print("2. View combatants")
         print("3. Modify combatant")
         print("4. Start battle")
-        print("5. Exit")
+        print("5. Simulate round")
+        print("6. Get battle result")
+        print("7. Exit")
 
-    def load_combatants(self):
-        for side in ['a', 'b']:
-            file_path = input(f"Enter the file path for combatant {side.upper()}: ").strip()
-            if not file_path:
-                file_path = f"combatant_{side}.toml"
-            try:
-                combatant = load_combatant(file_path)
-                self.combatants[side] = combatant
-                print(f"Loaded {combatant.name} as combatant {side.upper()}")
-            except Exception as e:
-                print(f"Error loading combatant {side.upper()}: {e}")
+        choice = input("Enter your choice: ").strip()
 
-    def view_combatants(self):
-        for side, combatant in self.combatants.items():
-            print(f"\n--- Combatant {side.upper()}: {combatant.name} ---")
-            print(f"Armor: {combatant.armor}")
-            print(f"Shields: {combatant.shields}")
-            print(f"Ballistics: {combatant.ballistics}")
-            print(f"Chemical: {combatant.chemical}")
-            print(f"Firepower: {combatant.firepower}")
-            print(f"Velocity: {combatant.velocity}")
-            print("Effects:")
-            for effect in combatant.effects:
-                print(f"  - {effect.name}")
-
-    def modify_combatant(self):
-        side = input("Which combatant to modify? (A/B): ").strip().lower()
-        if side not in self.combatants:
-            print(f"Combatant {side.upper()} not loaded.")
-            return
-
-        combatant = self.combatants[side]
-        print(f"\nModifying {combatant.name}")
-        attribute = input("Enter attribute to modify (armor/shields/ballistics/chemical/firepower/velocity): ").strip().lower()
-        if attribute not in ['armor', 'shields', 'ballistics', 'chemical', 'firepower', 'velocity']:
-            print("Invalid attribute.")
-            return
-
-        try:
+        if choice == "1":
+            file_a = input("Enter file path for combatant A: ")
+            if not file_a:
+                file_a = "combatant_a.toml"
+            file_b = input("Enter file path for combatant B: ")
+            if not file_b:
+                file_b = "combatant_b.toml"
+            simulator.load_combatants(file_a, file_b)
+        elif choice == "2":
+            simulator.view_combatants()
+        elif choice == "3":
+            side = input("Which combatant to modify? (A/B): ")
+            attribute = input("Enter attribute to modify: ")
             new_value = int(input(f"Enter new value for {attribute}: "))
-            setattr(combatant, attribute, new_value)
-            print(f"Updated {attribute} to {new_value} for {combatant.name}")
-        except ValueError:
-            print("Invalid input. Please enter a number.")
+            print(simulator.modify_combatant(side, attribute, new_value))
+        elif choice == "4":
+            simulator.start_battle()
+        elif choice == "5":
+            simulator.simulate_round()
+        elif choice == "6":
+            print(simulator.get_battle_result())
+        elif choice == "7":
+            print("Exiting the Battle Simulator. Goodbye!")
+            break
+        else:
+            print("Invalid choice. Please try again.")
 
-    def start_battle(self):
-        if len(self.combatants) != 2:
-            print("Please load both combatants before starting a battle.")
-            return
-
-        self.combat_engine = CombatEngine(
-            combatant_a=self.combatants['a'],
-            combatant_b=self.combatants['b'],
-            logger=self.logger
-        )
-
-        round_number = 1
-        while not self.combatants['a'].is_dead() and not self.combatants['b'].is_dead():
-            print(f"\n--- Round {round_number} ---")
-            self.combat_engine.simulate_round()
-            self.display_battle_status()
-            
-            if self.get_user_feedback():
-                self.modify_round()
-            
-            round_number += 1
-
-        winner = self.combatants['b'] if self.combatants['a'].is_dead() else self.combatants['a']
-        print(f"\nBattle ended. Winner: {winner.name}")
-
-    def display_battle_status(self):
-        for side, combatant in self.combatants.items():
-            print(f"{combatant.name} - Armor: {combatant.armor}, Shields: {combatant.shields}")
-
-    def get_user_feedback(self) -> bool:
-        return input("Modify results? (y/n) ").strip().lower() == "y"
-
-    def modify_round(self):
-        self.modify_combatant()
 
 if __name__ == "__main__":
-    simulator = BattleSimulator()
-    simulator.run()
+    main()
     print("Exiting")
