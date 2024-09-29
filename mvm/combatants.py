@@ -1,5 +1,5 @@
 from mvm.core import AttackType, Combatant, Effect
-from utils.combat_logging import logger
+from utils.combat_logging import logger  # noqa: F401
 
 
 # Shinigami

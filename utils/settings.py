@@ -19,7 +19,7 @@ class Settings(BaseSettings):
         if cls._instance is None:
             cls._instance = super().__new__(cls, *args, **kwargs)
         return cls._instance
-    
+
     @classmethod
     def reset(cls):
         """Reset the singleton instance to allow reloading environment variables."""

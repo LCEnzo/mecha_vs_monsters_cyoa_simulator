@@ -1,5 +1,5 @@
 from mvm.core import AttackType, Combatant, CombatEngine, Terrain
-from utils.combat_logging import logger
+from utils.combat_logging import logger  # noqa: F401
 
 
 # Universal
@@ -54,7 +54,9 @@ lake_tampua = Terrain(
 #     def new_calculate_hit(attacker: Combatant, defender: Combatant, att_type: AttackType):
 #         if att_type == AttackType.BALLISTIC:
 #             attacker.modifiers.setdefault("attack_hit_chance_mod", {})
-#             attacker.modifiers["attack_hit_chance_mod"][AttackType.BALLISTIC] = attacker.modifiers.get("attack_hit_chance_mod", {}).get(AttackType.BALLISTIC, 0) + 20
+#             attacker.modifiers["attack_hit_chance_mod"][AttackType.BALLISTIC] = (
+#                 attacker.modifiers.get("attack_hit_chance_mod", {}).get(AttackType.BALLISTIC, 0) + 20
+#             )
 #         result = old_calculate_hit(attacker, defender, att_type)
 #         if att_type == AttackType.BALLISTIC:
 #             attacker.modifiers["attack_hit_chance_mod"][AttackType.BALLISTIC] -= 20
@@ -105,7 +107,9 @@ def ruthenian_grasses_effect(engine: CombatEngine):
     # old_calculate_hit = engine.calculate_hit
     # def new_calculate_hit(attacker: Combatant, defender: Combatant, att_type: AttackType):
     #     attacker.modifiers.setdefault("attack_hit_chance_mod", {})
-    #     attacker.modifiers["attack_hit_chance_mod"][att_type] = attacker.modifiers.get("attack_hit_chance_mod", {}).get(att_type, 0) - 20
+    #     attacker.modifiers["attack_hit_chance_mod"][att_type] = (
+    #          attacker.modifiers.get("attack_hit_chance_mod", {}).get(att_type, 0) - 20
+    #     )
     #     result = old_calculate_hit(attacker, defender, att_type)
     #     attacker.modifiers["attack_hit_chance_mod"][att_type] += 20
     #     return result
