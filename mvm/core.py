@@ -9,7 +9,7 @@ from typing import Callable, Self, TypeVarTuple, Unpack
 
 import tomli
 import tomli_w
-from pydantic import BaseModel, Field
+from pydantic import ConfigDict, BaseModel, Field
 from termcolor import colored
 
 from utils.combat_logging import logger
@@ -89,9 +89,7 @@ class Combatant(BaseModel):
     def on_attack_result(self, hit: bool, attack_type: AttackType) -> None:
         for effect in self.on_attack_result_effects:
             effect(self, hit, attack_type)
-
-    class Config:
-        arbitrary_types_allowed = True
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
     def __init__(self, **data):
         super().__init__(**data)
@@ -172,9 +170,7 @@ class CombatEngine(BaseModel):
     combatant_b: Combatant
     current_round: int = 1
     terrain: Terrain | None = None
-
-    class Config:
-        arbitrary_types_allowed = True
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
     def start_battle(self):
         logger.info("Battle started.")

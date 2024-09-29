@@ -25,6 +25,7 @@ db.sqlite3
 # Logging
 *.log
 *.log.*
+log.txt
 
 # Notes
 notes.md
