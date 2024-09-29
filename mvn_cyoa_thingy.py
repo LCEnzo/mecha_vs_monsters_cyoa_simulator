@@ -11,7 +11,7 @@ from typing import Union
 import tomli
 import tomli_w
 from pydantic import BaseModel, Field
-from termcolor import colored, COLORS
+from termcolor import colored
 
 
 ## LOGGING SETUP
@@ -62,8 +62,8 @@ class Effect(BaseModel):
         start_of_round: bool = False,
         end_of_turn: bool = False,
         end_of_attack: bool = False,
-        hit_roll: bool = False, # Whether or not an attack landed
-        att_type: AttackType | None = None, 
+        hit_roll: bool = False,  # Whether or not an attack landed
+        att_type: AttackType | None = None,
         *args,
         **kwargs,
     ) -> None:
@@ -93,6 +93,7 @@ class Combatant(BaseModel):
 
     def apply_damage(self, damage: int, damage_type: AttackType) -> int:
         """Apply damage based on shields/armor and return the actual applied damage"""
+        effective_hp = self.armor + self.shields
         damage = self.modify_damage(damage, damage_type)
 
         if self.shields > 0:
@@ -100,7 +101,9 @@ class Combatant(BaseModel):
         else:
             self.armor = max(0, self.armor - damage)
 
-        return damage
+        applied_damage = effective_hp - (self.shields + self.armor)
+        self.on_damage_taken(applied_damage, damage_type)
+        return max(0, applied_damage)
 
     def modify_damage(self, damage: int, damage_type: AttackType) -> int:
         """Apply armor/shield reductions or buffs."""
@@ -132,11 +135,31 @@ class Combatant(BaseModel):
         for effect in self.effects:
             effect.apply(self, other, args, kwargs)
 
+    def on_damage_taken(self, damage: int, damage_type: AttackType) -> None:
+        pass
+
+    def on_hit_roll(self, roll: int, attack_type: AttackType) -> None:
+        pass
+
+    def on_attack_result(self, hit: bool, attack_type: AttackType) -> None:
+        pass
+
+
+class Terrain(BaseModel):
+    name: str
+    effect: str
+    description: str
+
+    def apply_effect(self, combat_engine: "CombatEngine", current_round: int):
+        logger.info(f"Executed name {colored(self.name, 'yellow')}")
+        exec(self.effect, {"engine": combat_engine, "round": current_round})
+
 
 class CombatEngine(BaseModel):
     combatant_a: Combatant
     combatant_b: Combatant
     current_round: int = 1
+    terrain: Terrain | None = None
 
     class Config:
         arbitrary_types_allowed = True
@@ -148,6 +171,9 @@ class CombatEngine(BaseModel):
         logger.info(self.get_battle_result())
 
     def simulate_round(self) -> None:
+        if self.terrain:
+            self.terrain.apply_effect(self, self.current_round)
+
         total_velocity_a = self.combatant_a.velocity + randint(1, 1000)
         total_velocity_b = self.combatant_b.velocity + randint(1, 1000)
 
@@ -192,12 +218,16 @@ class CombatEngine(BaseModel):
     def calculate_hit(self, attacker: Combatant, defender: Combatant, att_type: AttackType) -> bool:
         """Calculate whether an attack hits, taking into account modifiers."""
         base_hit = randint(0, 1000)
+        attacker.on_hit_roll(base_hit, att_type)
         hit_chance = (attacker.velocity - defender.velocity) // 2
 
         att_mod = attacker.modifiers.get("attack_hit_chance_mod", {}).get(att_type.value, 0)
         def_mod = defender.modifiers.get("defense_hit_chance_mod", {}).get(att_type.value, 0)
 
         hit_roll = base_hit + att_mod - def_mod >= 500 - hit_chance
+        attacker.on_attack_result(hit_roll, att_type)
+        defender.on_attack_result(not hit_roll, att_type)
+
         logger.debug(
             f"Attack ({attacker.name}) calc hit: {(base_hit, hit_chance, att_mod, def_mod) = } -> {hit_roll = }"
         )
@@ -229,6 +259,7 @@ class BattleSimulator(BaseModel):
     combatant_a: Combatant | None = None
     combatant_b: Combatant | None = None
     combat_engine: CombatEngine | None = None
+    terrain: Terrain | None = None
 
     def load_combatants(self, file_path_a: str, file_path_b: str):
         try:
@@ -282,8 +313,11 @@ class BattleSimulator(BaseModel):
     def start_battle(self):
         if not self.combatant_a or not self.combatant_b:
             logger.warning("Please load both combatants before starting a battle.")
+            return
 
-        self.combat_engine = CombatEngine(combatant_a=self.combatant_a, combatant_b=self.combatant_b, logger=logger)
+        self.combat_engine = CombatEngine(
+            combatant_a=self.combatant_a, combatant_b=self.combatant_b, terrain=self.terrain
+        )
         self.combat_engine.start_battle()
 
     def simulate_round(self):
@@ -307,7 +341,11 @@ class BattleSimulator(BaseModel):
         total_rounds = 0
 
         # Store the original log level of the console handler
-        console_handler = next(handler for handler in logger.handlers if isinstance(handler, logging.StreamHandler) and handler.name == "stdout_stream_log")
+        console_handler = next(
+            handler
+            for handler in logger.handlers
+            if isinstance(handler, logging.StreamHandler) and handler.name == "stdout_stream_log"
+        )
         original_level = console_handler.level
 
         # Temporarily set the console handler to only show WARNING and above
@@ -347,6 +385,13 @@ class BattleSimulator(BaseModel):
 
         return results, avg_rounds
 
+    def load_terrain(self, file_path: str):
+        try:
+            self.terrain = load_terrain(file_path)
+            logger.info(f"Loaded terrain: {self.terrain.name}")
+        except Exception as e:
+            logger.error(f"Error loading terrain: {e}")
+
 
 def load_combatant(file_path: Union[str, Path]) -> Combatant:
     with open(file_path, "rb") as f:
@@ -360,23 +405,38 @@ def save_combatant(combatant: Combatant, file_path: Union[str, Path]) -> None:
         tomli_w.dump(combatant.dict(), f)
 
 
+def load_terrain(file_path: Union[str, Path]) -> Terrain:
+    with open(file_path, "rb") as f:
+        data = tomli.load(f)
+    return Terrain.parse_obj(data)
+
+
+def save_terrain(terrain: Terrain, file_path: Union[str, Path]) -> None:
+    with open(file_path, "wb") as f:
+        tomli_w.dump(terrain.dict(), f)
+
+
 def main():
     simulator = BattleSimulator()
 
     file_a = "combatant_a.toml"
     file_b = "combatant_b.toml"
+    terrain_file = "terrain.toml"
     simulator.load_combatants(file_a, file_b)
+    simulator.load_terrain(terrain_file)
 
     while True:
         print("\n--- Mech vs Monster Battle Simulator ---")
         print("1. Load combatants")
-        print("2. View combatants")
-        print("3. Modify combatant")
-        print("4. Start battle")
-        print("5. Simulate round")
-        print("6. Get battle result")
-        print("7. Run multiple battles")
-        print("8. Exit")
+        print("2. Load terrain")
+        print("3. View combatants")
+        print("4. View terrain")
+        print("5. Modify combatant")
+        print("6. Start battle")
+        print("7. Simulate round")
+        print("8. Get battle result")
+        print("9. Run multiple battles")
+        print("10. Exit")
 
         choice = input("Enter your choice: ").strip()
 
@@ -389,22 +449,33 @@ def main():
                 file_b = "combatant_b.toml"
             simulator.load_combatants(file_a, file_b)
         elif choice == "2":
-            simulator.view_combatants()
+            terrain_file = input("Enter file path for terrain: ")
+            if not terrain_file:
+                terrain_file = "terrain.toml"
+            simulator.load_terrain(terrain_file)
         elif choice == "3":
+            simulator.view_combatants()
+        elif choice == "4":
+            if simulator.terrain:
+                print(f"Terrain: {simulator.terrain.name}")
+                print(f"Description: {simulator.terrain.description}")
+            else:
+                print("No terrain loaded.")
+        elif choice == "5":
             side = input("Which combatant to modify? (A/B): ")
             attribute = input("Enter attribute to modify: ")
             new_value = int(input(f"Enter new value for {attribute}: "))
             print(simulator.modify_combatant(side, attribute, new_value))
-        elif choice == "4":
-            simulator.start_battle()
-        elif choice == "5":
-            simulator.simulate_round()
         elif choice == "6":
-            print(simulator.get_battle_result())
+            simulator.start_battle()
         elif choice == "7":
+            simulator.simulate_round()
+        elif choice == "8":
+            print(simulator.get_battle_result())
+        elif choice == "9":
             num_battles = int(input("Enter the number of battles to simulate: "))
             simulator.run_multiple_battles(num_battles)
-        elif choice == "8":
+        elif choice == "10":
             print("Exiting the Battle Simulator. Goodbye!")
             break
         else:
