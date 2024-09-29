@@ -19,9 +19,11 @@ def setup_logging() -> logging.Logger:
     logger.setLevel(logging.DEBUG)
 
     file_handler = logging.FileHandler("combat.log")
+    file_handler.name = "combat_file_log"
     file_handler.setLevel(logging.DEBUG)
 
     console_handler = logging.StreamHandler()
+    console_handler.name = "stdout_stream_log"
     console_handler.setLevel(logging.INFO)
 
     formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
@@ -52,7 +54,16 @@ class Effect(BaseModel):
     triggered: bool = False
     trigger_count: int = 0
 
-    def apply(self, combatant: "Combatant", other: 'Combatant', start_of_round: bool = False, end_of_turn: bool = False, end_of_attack: bool = False, *args, **kwargs) -> None:
+    def apply(
+        self,
+        combatant: "Combatant",
+        other: "Combatant",
+        start_of_round: bool = False,
+        end_of_turn: bool = False,
+        end_of_attack: bool = False,
+        *args,
+        **kwargs,
+    ) -> None:
         try:
             if eval(self.trigger_condition):
                 exec(f"{self.effect_func}")
@@ -112,8 +123,8 @@ class Combatant(BaseModel):
 
     def is_dead(self) -> bool:
         return self.armor <= 0
-    
-    def apply_effects(self, other: 'Combatant', *args, **kwargs):
+
+    def apply_effects(self, other: "Combatant", *args, **kwargs):
         for effect in self.effects:
             effect.apply(self, other, args, kwargs)
 
@@ -137,8 +148,8 @@ class CombatEngine(BaseModel):
         total_velocity_b = self.combatant_b.velocity + randint(1, 1000)
 
         logger.info(
-            f"Round {self.current_round}: {self.combatant_a.name} has total velocity {total_velocity_a}, " 
-            f"AR: {self.combatant_a.armor} SH: {self.combatant_a.shields} vs {self.combatant_b.name} has " 
+            f"Round {self.current_round}: {self.combatant_a.name} has total velocity {total_velocity_a}, "
+            f"AR: {self.combatant_a.armor} SH: {self.combatant_a.shields} vs {self.combatant_b.name} has "
             f"{total_velocity_b}, AR: {self.combatant_b.armor} SH: {self.combatant_b.shields}"
         )
 
@@ -267,9 +278,7 @@ class BattleSimulator(BaseModel):
         if not self.combatant_a or not self.combatant_b:
             logger.warning("Please load both combatants before starting a battle.")
 
-        self.combat_engine = CombatEngine(
-            combatant_a=self.combatant_a, combatant_b=self.combatant_b, logger=logger
-        )
+        self.combat_engine = CombatEngine(combatant_a=self.combatant_a, combatant_b=self.combatant_b, logger=logger)
         self.combat_engine.start_battle()
 
     def simulate_round(self):
@@ -283,7 +292,7 @@ class BattleSimulator(BaseModel):
         if not self.combat_engine:
             return "No battle in progress."
         return self.combat_engine.get_battle_result()
-    
+
     def run_multiple_battles(self, num_battles: int):
         if not self.combatant_a or not self.combatant_b:
             logger.warning("Please load both combatants before running multiple battles.")
@@ -292,25 +301,42 @@ class BattleSimulator(BaseModel):
         results = {"combatant_a": 0, "combatant_b": 0}
         total_rounds = 0
 
-        for _ in range(num_battles):
-            self.combat_engine = CombatEngine(
-                combatant_a=self.combatant_a.copy(deep=True),
-                combatant_b=self.combatant_b.copy(deep=True)
-            )
-            while not self.combat_engine.is_battle_over():
-                self.combat_engine.simulate_round()
-            
-            total_rounds += self.combat_engine.current_round - 1
-            if self.combat_engine.combatant_a.is_dead():
-                results["combatant_b"] += 1
-            else:
-                results["combatant_a"] += 1
+        # Store the original log level of the console handler
+        console_handler = next(handler for handler in logger.handlers if isinstance(handler, logging.StreamHandler) and handler.name == "stdout_stream_log")
+        original_level = console_handler.level
 
-        avg_rounds = total_rounds / num_battles
-        logger.info(f"Battle simulation results after {num_battles} battles:")
-        logger.info(f"{self.combatant_a.name} won {results['combatant_a']} times ({results['combatant_a']/num_battles*100:.2f}%)")
-        logger.info(f"{self.combatant_b.name} won {results['combatant_b']} times ({results['combatant_b']/num_battles*100:.2f}%)")
-        logger.info(f"Average number of rounds per battle: {avg_rounds:.2f}")
+        # Temporarily set the console handler to only show WARNING and above
+        # console_handler.setLevel(logging.WARNING)
+
+        try:
+            for _ in range(num_battles):
+                self.combat_engine = CombatEngine(
+                    combatant_a=self.combatant_a.copy(deep=True), combatant_b=self.combatant_b.copy(deep=True)
+                )
+                while not self.combat_engine.is_battle_over():
+                    self.combat_engine.simulate_round()
+
+                total_rounds += self.combat_engine.current_round - 1
+                if self.combat_engine.combatant_a.is_dead():
+                    results["combatant_b"] += 1
+                else:
+                    results["combatant_a"] += 1
+
+                print("")
+
+            console_handler.setLevel(original_level)
+
+            avg_rounds = total_rounds / num_battles
+            logger.info(f"Battle simulation results after {num_battles} battles:")
+            logger.info(
+                f"{self.combatant_a.name} won {results['combatant_a']} times ({results['combatant_a']/num_battles*100:.2f}%)"
+            )
+            logger.info(
+                f"{self.combatant_b.name} won {results['combatant_b']} times ({results['combatant_b']/num_battles*100:.2f}%)"
+            )
+            logger.info(f"Average number of rounds per battle: {avg_rounds:.2f}")
+        finally:
+            console_handler.setLevel(original_level)
 
         return results, avg_rounds
 
