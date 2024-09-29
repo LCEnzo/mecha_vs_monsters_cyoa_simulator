@@ -13,6 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from termcolor import colored
 
 from utils.combat_logging import logger
+from utils.settings import settings
 
 
 class AttackType(str, enum.Enum):
@@ -29,7 +30,7 @@ class Effect(BaseModel):
     trigger_condition: Callable[[Self | Effect, Combatant, Combatant, bool, AttackType | None, Unpack[Ts]], bool]
     effect_func: Callable[[Self | Effect, Combatant, Combatant, Unpack[Ts]], None]
     triggered: bool = False
-    trigger_count: int = Field(..., ge=0)
+    trigger_count: int = Field(default=0, ge=0)
 
     def apply(
         self,
@@ -52,6 +53,9 @@ class Effect(BaseModel):
         except Exception as e:
             traceback.print_exc()
             logger.error(f"Effect {self.name} borked, exception {e}")
+
+            if settings.is_debug():
+                raise e
 
 
 class Combatant(BaseModel):
@@ -78,7 +82,7 @@ class Combatant(BaseModel):
     on_hit_roll_effects: list[Callable[[Combatant, int, AttackType], None]] = Field(default_factory=list)
     on_attack_result_effects: list[Callable[[Combatant, bool, AttackType], None]] = Field(default_factory=list)
 
-    @field_validator('armor', 'shields', 'ballistics', 'chemical', 'firepower', 'velocity')
+    @field_validator("armor", "shields", "ballistics", "chemical", "firepower", "velocity")
     @classmethod
     def check_positive(cls, v):
         if v < 0:
@@ -96,6 +100,7 @@ class Combatant(BaseModel):
     def on_attack_result(self, hit: bool, attack_type: AttackType) -> None:
         for effect in self.on_attack_result_effects:
             effect(self, hit, attack_type)
+
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     def __init__(self, **data):
@@ -261,9 +266,15 @@ class CombatEngine(BaseModel):
 
     def get_battle_result(self) -> str:
         if self.combatant_a.is_dead():
-            return f"Battle ended. Winner: {colored(self.combatant_b.name, 'red')}"
+            return (
+                f"Battle ended. Winner: {colored(self.combatant_b.name, 'red')} with "
+                f"AR {self.combatant_b.armor} & SH {self.combatant_b.shields}"
+            )
         elif self.combatant_b.is_dead():
-            return f"Battle ended. Winner: {colored(self.combatant_a.name, 'green')}"
+            return (
+                f"Battle ended. Winner: {colored(self.combatant_a.name, 'green')} with "
+                f"AR {self.combatant_b.armor} & SH {self.combatant_b.shields}"
+            )
         else:
             return "Battle is still ongoing."
 
@@ -362,12 +373,31 @@ class BattleSimulator(BaseModel):
             return "No battle in progress."
         return self.combat_engine.get_battle_result()
 
+    def print_multiple_battle_results(self, total_rounds: int, num_battles: int, results: dict[str, int]):
+        if self.combatant_a is None or self.combatant_b is None:
+            logger.warning("Please load both combatants before running `print_multiple_battle_results`.")
+            if settings.is_debug():
+                raise BaseException("Trying to access a combatant which is not set in BattleSimulator")
+            return None
+
+        avg_rounds = total_rounds / num_battles
+        logger.info(f"Battle simulation results after {num_battles} battles:")
+        logger.info(
+            f"{self.combatant_a.name} won {results['combatant_a']} times "
+            f"({results['combatant_a']/num_battles*100:.2f}%)"
+        )
+        logger.info(
+            f"{self.combatant_b.name} won {results['combatant_b']} times "
+            f"({results['combatant_b']/num_battles*100:.2f}%)"
+        )
+        logger.info(f"Average number of rounds per battle: {avg_rounds:.2f}")
+
     def run_multiple_battles(self, num_battles: int):
         if not self.combatant_a or not self.combatant_b:
             logger.warning("Please load both combatants before running multiple battles.")
             return None
 
-        results = {"combatant_a": 0, "combatant_b": 0}
+        results: dict[str, int] = {"combatant_a": 0, "combatant_b": 0}
         total_rounds = 0
 
         # Store the original log level of the console handler
@@ -403,21 +433,19 @@ class BattleSimulator(BaseModel):
 
             console_handler.setLevel(original_level)
 
-            avg_rounds = total_rounds / num_battles
-            logger.info(f"Battle simulation results after {num_battles} battles:")
-            logger.info(
-                f"{self.combatant_a.name} won {results['combatant_a']} times "
-                f"({results['combatant_a']/num_battles*100:.2f}%)"
-            )
-            logger.info(
-                f"{self.combatant_b.name} won {results['combatant_b']} times "
-                f"({results['combatant_b']/num_battles*100:.2f}%)"
-            )
-            logger.info(f"Average number of rounds per battle: {avg_rounds:.2f}")
+            self.print_multiple_battle_results(total_rounds, num_battles, results)
+        except Exception as e:
+            self.print_multiple_battle_results(total_rounds, num_battles, results)
+
+            traceback.print_exc()
+            logger.error(f"Error trying to run multiple battles, ran {num_battles} battles")
+
+            if settings.is_debug():
+                raise e
         finally:
             console_handler.setLevel(original_level)
 
-        return results, avg_rounds
+        return results, total_rounds / num_battles
 
     def load_terrain_via_file(self, file_path: str):
         try:

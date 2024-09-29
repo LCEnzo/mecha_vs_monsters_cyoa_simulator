@@ -1,4 +1,4 @@
-from mvm.core import AttackType, BattleSimulator, Combatant, CombatEngine
+from mvm.core import CombatEngine
 from tests.utils import create_combatant
 
 

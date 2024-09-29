@@ -4,6 +4,7 @@ from mvm.combatants import combatants
 from mvm.core import BattleConfig, BattleSimulator
 from mvm.terrains import terrains
 from utils.combat_logging import logger
+from utils.settings import settings  # noqa: F401
 
 
 def run_config_battles(battle_config: BattleConfig, simulator: BattleSimulator):
