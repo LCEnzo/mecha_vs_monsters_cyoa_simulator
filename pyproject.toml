@@ -45,7 +45,10 @@ extend-immutable-calls = ["fastapi.Depends", "fastapi.params.Depends", "fastapi.
 classmethod-decorators = ["classmethod", "pydantic.validator"]
 
 [tool.mypy]
-plugins = ["pydantic.mypy", "sqlalchemy.ext.mypy.plugin"]
+plugins = [
+	"pydantic.mypy", 
+	# "sqlalchemy.ext.mypy.plugin"
+]
 exclude=["migrations", "venv", ".venv", "alembic"]
 
 [tool.pytest.ini_options]
