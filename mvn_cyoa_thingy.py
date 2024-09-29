@@ -11,6 +11,7 @@ from typing import Union
 import tomli
 import tomli_w
 from pydantic import BaseModel, Field
+from termcolor import colored, COLORS
 
 
 ## LOGGING SETUP
@@ -61,6 +62,8 @@ class Effect(BaseModel):
         start_of_round: bool = False,
         end_of_turn: bool = False,
         end_of_attack: bool = False,
+        hit_roll: bool = False, # Whether or not an attack landed
+        att_type: AttackType | None = None, 
         *args,
         **kwargs,
     ) -> None:
@@ -69,6 +72,7 @@ class Effect(BaseModel):
                 exec(f"{self.effect_func}")
                 self.triggered = True
                 self.trigger_count += 1
+                logger.info(f"Executed effect {colored(self.name, 'light_cyan')} for {combatant.name}")
         except Exception as e:
             traceback.print_exc()
             logger.error(f"Effect {self.name} borked, exception {e}")
@@ -148,7 +152,7 @@ class CombatEngine(BaseModel):
         total_velocity_b = self.combatant_b.velocity + randint(1, 1000)
 
         logger.info(
-            f"Round {self.current_round}: {self.combatant_a.name} has total velocity {total_velocity_a}, "
+            f"Round {self.current_round}: {colored(self.combatant_a.name, 'green')} has total velocity {total_velocity_a}, "
             f"AR: {self.combatant_a.armor} SH: {self.combatant_a.shields} vs {self.combatant_b.name} has "
             f"{total_velocity_b}, AR: {self.combatant_b.armor} SH: {self.combatant_b.shields}"
         )
@@ -178,11 +182,12 @@ class CombatEngine(BaseModel):
         if hit_roll:
             damage = self.calculate_damage(attacker, defender, att_type)
             applied_damage = defender.apply_damage(damage, att_type)
-            attacker.apply_effects(defender, end_of_attack=True)
-            defender.apply_effects(attacker, end_of_attack=True)
             logger.info(f"{attacker.name} hits {defender.name} with {att_type.value} for {applied_damage} damage")
         else:
             logger.info(f"{attacker.name} misses {defender.name} with {att_type.value}")
+
+        attacker.apply_effects(defender, end_of_attack=True, hit_roll=hit_roll, att_type=att_type)
+        defender.apply_effects(attacker, end_of_attack=True, hit_roll=hit_roll, att_type=att_type)
 
     def calculate_hit(self, attacker: Combatant, defender: Combatant, att_type: AttackType) -> bool:
         """Calculate whether an attack hits, taking into account modifiers."""
@@ -207,16 +212,16 @@ class CombatEngine(BaseModel):
 
     def get_battle_result(self) -> str:
         if self.combatant_a.is_dead():
-            return f"Battle ended. Winner: {self.combatant_b.name}"
+            return f"Battle ended. Winner: {colored(self.combatant_b.name, 'red')}"
         elif self.combatant_b.is_dead():
-            return f"Battle ended. Winner: {self.combatant_a.name}"
+            return f"Battle ended. Winner: {colored(self.combatant_a.name, 'green')}"
         else:
             return "Battle is still ongoing."
 
     def get_battle_status(self) -> str:
         return (
-            f"{self.combatant_a.name} - Armor: {self.combatant_a.armor}, Shields: {self.combatant_a.shields}\n"
-            f"{self.combatant_b.name} - Armor: {self.combatant_b.armor}, Shields: {self.combatant_b.shields}"
+            f"{colored(self.combatant_a.name, 'green')} - Armor: {self.combatant_a.armor}, Shields: {self.combatant_a.shields}\n"
+            f"{colored(self.combatant_b.name, 'red')} - Armor: {self.combatant_b.armor}, Shields: {self.combatant_b.shields}"
         )
 
 
@@ -321,6 +326,8 @@ class BattleSimulator(BaseModel):
                     results["combatant_b"] += 1
                 else:
                     results["combatant_a"] += 1
+
+                print(self.get_battle_result())
 
                 print("")
 

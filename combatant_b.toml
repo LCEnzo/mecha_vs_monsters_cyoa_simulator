@@ -1,13 +1,29 @@
-name = "Shinigami"
-armor = 2500
-shields = 2500
-ballistics = 800
-chemical = 0
-firepower = 1800
-velocity = 200
+# name = "Shinigami"
+# armor = 2500
+# shields = 2500
+# ballistics = 800
+# chemical = 0
+# firepower = 1800
+# velocity = 200
+
+
+# [[effects]]
+# name = "Switcharoo"
+# trigger_condition = "end_of_attack and other.shields == 0 and self.trigger_count == 0"
+# effect_func = "combatant.chemical, combatant.firepower = (combatant.firepower, combatant.chemical)"
+
+# ---------------------------
+
+name = "Suit"
+armor = 1360
+shields = 1130
+ballistics = 356
+chemical = 657
+firepower = 0
+velocity = 124
 
 
 [[effects]]
-name = "Switcharoo"
-trigger_condition = "end_of_attack and other.shields == 0"
-effect_func = "combatant.chemical, combatant.firepower = (combatant.firepower, combatant.chemical)"
+name = "Extra"
+trigger_condition = "end_of_attack and hit_roll and att_type == AttackType.BALLISTICS"
+effect_func = "combatant.chemical += 60"
