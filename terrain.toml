@@ -1,0 +1,70 @@
+# hela.toml
+name = "Hela"
+description = "When a combatant loses 10% or more of their maximum Armor in a single attack, they take an additional 40 Ballistics damage."
+condition = "current_round == 1"
+effect = """
+def check_armor_loss(self, damage, armor_dmg, shields_dmg, damage_type):
+    if damage >= self.original_armor * 0.1:
+        self.apply_damage(40, "Ballistics")
+engine.combatant_a.on_damage_taken = check_armor_loss
+engine.combatant_b.on_damage_taken = check_armor_loss
+"""
+
+# # lake_tampua.toml
+# name = "Lake Tampua"
+# description = "Whenever a combatant rolls below 100 on a hit roll, they take 100 Ballistics damage and loses up to 50 Velocity."
+# effect = """
+# def check_low_roll(combatant, roll):
+#     if roll < 100:
+#         combatant.apply_damage(100, AttackType.BALLISTIC)
+#         combatant.velocity = max(0, combatant.velocity - 50)
+# engine.combatant_a.on_hit_roll = check_low_roll
+# engine.combatant_b.on_hit_roll = check_low_roll
+# """
+
+# # malvinas.toml
+# name = "Malvinas"
+# description = "Increase all Ballistics hit rolls and damage by 20."
+# effect = """
+# for combatant in [engine.combatant_a, engine.combatant_b]:
+#     old_calculate_hit = engine.calculate_hit
+#     def new_calculate_hit(attacker, defender, att_type):
+#         if att_type == AttackType.BALLISTIC:
+#             attacker.modifiers.setdefault("attack_hit_chance_mod", {})["Ballistics"] = attacker.modifiers.get("attack_hit_chance_mod", {}).get("Ballistics", 0) + 20
+#         result = old_calculate_hit(attacker, defender, att_type)
+#         if att_type == AttackType.BALLISTIC:
+#             attacker.modifiers["attack_hit_chance_mod"]["Ballistics"] -= 20
+#         return result
+#     engine.calculate_hit = new_calculate_hit
+
+#     old_get_damage = combatant.get_damage
+#     def new_get_damage(damage_type):
+#         damage = old_get_damage(damage_type)
+#         if damage_type == AttackType.BALLISTIC:
+#             damage += 20
+#         return damage
+#     combatant.get_damage = new_get_damage
+# """
+
+# # okavango.toml
+# name = "Okavango"
+# description = "Whenever a combatant misses an attack, reduce their Velocity by up to 11 until the start of their next turn."
+# effect = """
+# def reduce_velocity_on_miss(attacker, hit):
+#     if not hit:
+#         attacker.velocity = max(0, attacker.velocity - 11)
+# engine.on_attack_result = reduce_velocity_on_miss
+# """
+
+# # ruthenian_grasses.toml
+# name = "Ruthenian Grasses"
+# description = "Reduce both combatants' hit rolls by up to 20."
+# effect = """
+# old_calculate_hit = engine.calculate_hit
+# def new_calculate_hit(attacker, defender, att_type):
+#     attacker.modifiers.setdefault("attack_hit_chance_mod", {})[att_type.value] = attacker.modifiers.get("attack_hit_chance_mod", {}).get(att_type.value, 0) - 20
+#     result = old_calculate_hit(attacker, defender, att_type)
+#     attacker.modifiers["attack_hit_chance_mod"][att_type.value] += 20
+#     return result
+# engine.calculate_hit = new_calculate_hit
+# """

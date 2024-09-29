@@ -1,0 +1,11 @@
+[[battles]]
+name="First Battle"
+combatant_a = "LCEnzo"
+combatant_b = "Suit"
+terrain = "Hela"
+
+[[battles]]
+name="First Battle v2"
+combatant_a = "LCEnzo"
+combatant_b = "Shinigami"
+terrain = "Hela"
