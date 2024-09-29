@@ -29,7 +29,6 @@ class Effect(BaseModel):
     name: str
     trigger_condition: Callable[[Self | Effect, Combatant, Combatant, bool, AttackType | None, Unpack[Ts]], bool]
     effect_func: Callable[[Self | Effect, Combatant, Combatant, Unpack[Ts]], None]
-    triggered: bool = False
     trigger_count: int = Field(default=0, ge=0)
 
     def apply(
@@ -47,7 +46,6 @@ class Effect(BaseModel):
         try:
             if self.trigger_condition(self, combatant, other, hit_roll, att_type, *args, **kwargs):
                 self.effect_func(self, combatant, other, *args, **kwargs)
-                self.triggered = True
                 self.trigger_count += 1
                 logger.info(f"Executed effect {colored(self.name, 'light_cyan')} for {combatant.name}")
         except Exception as e:
@@ -170,10 +168,12 @@ class Terrain(BaseModel):
     description: str
     effect: Callable[[CombatEngine], None]
     condition: Callable[[CombatEngine, int], bool] = lambda engine, round: True  # Default condition always true
+    triggered: bool = False
 
     def apply_effect(self, combat_engine: CombatEngine, *args, **kwargs):
-        if self.condition(combat_engine, *args, **kwargs):
-            self.effect(combat_engine, *args, **kwargs)
+        if self.condition(self, combat_engine, *args, **kwargs):
+            self.effect(self, combat_engine, *args, **kwargs)
+            self.triggered = True
             logger.info(f"Executed terrain {colored(self.name, 'yellow')}")
 
 
@@ -309,11 +309,11 @@ class BattleSimulator(BaseModel):
             logger.error(f"Error loading combatants: {e}")
 
     def load_combatants(self, combatant_a: Combatant, combatant_b: Combatant):
-        self.combatant_a = combatant_a.copy()
-        self.combatant_b = combatant_b.copy()
+        self.combatant_a = combatant_a.model_copy()
+        self.combatant_b = combatant_b.model_copy()
 
     def load_terrain(self, terrain: Terrain):
-        self.terrain = terrain
+        self.terrain = terrain.model_copy()
 
     def view_combatants(self):
         if not self.combatant_a or not self.combatant_b:
@@ -356,7 +356,9 @@ class BattleSimulator(BaseModel):
             return
 
         self.combat_engine = CombatEngine(
-            combatant_a=self.combatant_a, combatant_b=self.combatant_b, terrain=self.terrain
+            combatant_a=self.combatant_a.model_copy(), 
+            combatant_b=self.combatant_b.model_copy(), 
+            terrain=self.terrain.model_copy()
         )
         self.combat_engine.start_battle()
 

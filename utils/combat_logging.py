@@ -1,4 +1,4 @@
-import logging
+import picologging as logging
 
 
 def setup_logging() -> logging.Logger:
@@ -13,7 +13,7 @@ def setup_logging() -> logging.Logger:
     console_handler.name = "stdout_stream_log"
     console_handler.setLevel(logging.INFO)
 
-    formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+    formatter = logging.Formatter("%(levelname)s - %(asctime)s - %(lineno)d - %(module)s - %(message)s")
     file_handler.setFormatter(formatter)
     console_handler.setFormatter(formatter)
 

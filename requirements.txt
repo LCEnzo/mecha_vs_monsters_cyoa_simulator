@@ -4,3 +4,6 @@ termcolor~=2.4.0
 pydantic~=2.9.2
 pytest~=8.3.3
 pydantic-settings~=2.5.2
+# The next version (0.9.3) I tried had broken support for asctime in the formatter
+# IDK about 0.9.2
+picologging==0.9.1 

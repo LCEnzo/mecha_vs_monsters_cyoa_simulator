@@ -3,18 +3,19 @@ from utils.combat_logging import logger  # noqa: F401
 
 
 # Universal
-def at_start_cond(engine: CombatEngine) -> bool:
-    return engine.current_round == 1
+def at_start_cond(self: Terrain, engine: CombatEngine) -> bool:
+    return self.triggered
 
 
 # Hela
-def hela_effect(engine: CombatEngine):
+def hela_effect(self: Terrain, engine: CombatEngine):
     def check_armor_loss(self: Combatant, damage: int, armor_dmg: int, shields_dmg: int, damage_type: AttackType):
-        if damage >= self.original_armor * 0.1:
+        if damage * 10 >= self.original_armor:
             self.apply_damage(40, AttackType.BALLISTIC)
 
     for combatant in [engine.combatant_a, engine.combatant_b]:
-        combatant.on_damage_taken_effects.append(check_armor_loss)
+        if check_armor_loss not in combatant.on_damage_taken_effects:
+            combatant.on_damage_taken_effects.append(check_armor_loss)
 
 
 hela = Terrain(
@@ -29,7 +30,7 @@ hela = Terrain(
 
 
 # Lake Tampua
-def lake_tampua_effect(engine: CombatEngine):
+def lake_tampua_effect(self: Terrain, engine: CombatEngine):
     def check_low_roll(self: Combatant, roll: int, attack_type: AttackType):
         if roll < 100:
             self.apply_damage(100, AttackType.BALLISTIC)
@@ -49,7 +50,7 @@ lake_tampua = Terrain(
 )
 
 # Malvinas
-# def malvinas_effect(engine: CombatEngine):
+# def malvinas_effect(self: Terrain, engine: CombatEngine):
 #     old_calculate_hit = engine.calculate_hit
 #     def new_calculate_hit(attacker: Combatant, defender: Combatant, att_type: AttackType):
 #         if att_type == AttackType.BALLISTIC:
@@ -81,7 +82,7 @@ lake_tampua = Terrain(
 
 
 # Okavango
-def okavango_effect(engine: CombatEngine):
+def okavango_effect(self: Terrain, engine: CombatEngine):
     def reduce_velocity_on_miss(self: Combatant, hit: bool, attack_type: AttackType):
         if not hit:
             self.velocity = max(0, self.velocity - 11)
@@ -101,7 +102,7 @@ okavango = Terrain(
 
 
 # Ruthenian Grasses
-def ruthenian_grasses_effect(engine: CombatEngine):
+def ruthenian_grasses_effect(self: Terrain, engine: CombatEngine):
     # TODO: Implement
 
     # old_calculate_hit = engine.calculate_hit
