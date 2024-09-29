@@ -6,24 +6,27 @@ from core import AttackType, Combatant, CombatEngine, Terrain
 def at_start_cond(engine: CombatEngine) -> bool:
     return engine.current_round == 1
 
+
 # Hela
 def hela_effect(engine: CombatEngine):
     def check_armor_loss(self: Combatant, damage: int, armor_dmg: int, shields_dmg: int, damage_type: AttackType):
         if damage >= self.original_armor * 0.1:
             self.apply_damage(40, AttackType.BALLISTIC)
-    
+
     for combatant in [engine.combatant_a, engine.combatant_b]:
         combatant.on_damage_taken_effects.append(check_armor_loss)
+
 
 hela = Terrain(
     name="Hela",
     description=(
-        "When a combatant loses 10% or more of their maximum Armor in a single attack, they take an " 
+        "When a combatant loses 10% or more of their maximum Armor in a single attack, they take an "
         + "additional 40 Ballistics damage."
     ),
     effect=hela_effect,
-    condition=at_start_cond
+    condition=at_start_cond,
 )
+
 
 # Lake Tampua
 def lake_tampua_effect(engine: CombatEngine):
@@ -31,9 +34,10 @@ def lake_tampua_effect(engine: CombatEngine):
         if roll < 100:
             self.apply_damage(100, AttackType.BALLISTIC)
             self.velocity = max(0, self.velocity - 50)
-    
+
     for combatant in [engine.combatant_a, engine.combatant_b]:
         combatant.on_hit_roll_effects.append(check_low_roll)
+
 
 lake_tampua = Terrain(
     name="Lake Tampua",
@@ -41,7 +45,7 @@ lake_tampua = Terrain(
         "When a combatant rolls below 100 on a hit roll, they take 100 Ballistics damage and lose up to 50 Velocity."
     ),
     effect=lake_tampua_effect,
-    condition=at_start_cond
+    condition=at_start_cond,
 )
 
 # Malvinas
@@ -73,14 +77,16 @@ lake_tampua = Terrain(
 #     condition=at_start_cond
 # )
 
+
 # Okavango
 def okavango_effect(engine: CombatEngine):
     def reduce_velocity_on_miss(self: Combatant, hit: bool, attack_type: AttackType):
         if not hit:
             self.velocity = max(0, self.velocity - 11)
-    
+
     for combatant in [engine.combatant_a, engine.combatant_b]:
         combatant.on_attack_result_effects.append(reduce_velocity_on_miss)
+
 
 okavango = Terrain(
     name="Okavango",
@@ -88,8 +94,9 @@ okavango = Terrain(
         "Whenever a combatant misses an attack, reduce their Velocity by up to 11 until the start of their next turn."
     ),
     effect=okavango_effect,
-    condition=at_start_cond
+    condition=at_start_cond,
 )
+
 
 # Ruthenian Grasses
 def ruthenian_grasses_effect(engine: CombatEngine):
@@ -105,11 +112,12 @@ def ruthenian_grasses_effect(engine: CombatEngine):
     # engine.calculate_hit = new_calculate_hit
     raise NotImplementedError()
 
+
 ruthenian_grasses = Terrain(
     name="Ruthenian Grasses",
     description="Reduce both combatants' hit rolls by up to 20.",
     effect=ruthenian_grasses_effect,
-    condition=at_start_cond
+    condition=at_start_cond,
 )
 
 terrains: dict[str, Terrain] = {

@@ -21,7 +21,8 @@ class AttackType(str, enum.Enum):
     BALLISTIC = "Ballistics"
 
 
-Ts = TypeVarTuple('Ts')  # for *args
+Ts = TypeVarTuple("Ts")  # for *args
+
 
 class Effect(BaseModel):
     name: str
@@ -265,7 +266,7 @@ class CombatEngine(BaseModel):
 
     def get_battle_status(self) -> str:
         return (
-            f"{colored(self.combatant_a.name, 'green')} - Armor: {self.combatant_a.armor}, " 
+            f"{colored(self.combatant_a.name, 'green')} - Armor: {self.combatant_a.armor}, "
             f"Shields: {self.combatant_a.shields}\n"
             f"{colored(self.combatant_b.name, 'red')} - Armor: {self.combatant_b.armor}, "
             f"Shields: {self.combatant_b.shields}"
@@ -462,5 +463,3 @@ def load_terrain(file_path: str | Path) -> Terrain:
 def save_terrain(terrain: Terrain, file_path: str | Path) -> None:
     with open(file_path, "wb") as f:
         tomli_w.dump(terrain.dict(), f)
-
-
