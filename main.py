@@ -1,3 +1,5 @@
+#! python
+
 from typing import Dict, Generic, TypeVar
 
 from pydantic import BaseModel
