@@ -5,3 +5,9 @@ ballistics = 800
 chemical = 0
 firepower = 1800
 velocity = 200
+
+
+[[effects]]
+name = "Switcharoo"
+trigger_condition = "end_of_attack and other.shields == 0"
+effect_func = "combatant.chemical, combatant.firepower = (combatant.firepower, combatant.chemical)"

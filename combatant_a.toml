@@ -9,14 +9,17 @@ velocity = 357
 [[effects]]
 name = "Last Stand"
 trigger_condition = "combatant.armor == 0 and self.trigger_count == 0"
-effect_func = "combatant.armor = 1"
-duration = 1
+effect_func = "combatant.armor = int(1)"
 
 [[effects]]
 name = "Shield Plates"
 trigger_condition = "combatant.shields == 0 and self.trigger_count == 0"
-effect_func = "combatant.shields = 1"
-duration = 1
+effect_func = "combatant.shields = int(1)"
+
+[[effects]]
+name = "Flare Knives"
+trigger_condition = "self.trigger_count < 10 and start_of_round is True"
+effect_func = "enemy.apply_damage(15, AttackType.FIREPOWER)"
 
 [modifiers.attack_hit_chance_mod]
 Firepower = 56
