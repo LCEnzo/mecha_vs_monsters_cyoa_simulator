@@ -15,8 +15,6 @@ from termcolor import colored
 from utils.combat_logging import logger
 from utils.settings import settings
 
-# from line_profiler import profile
-
 
 class AttackType(str, enum.Enum):
     FIREPOWER = "Firepower"
@@ -407,7 +405,6 @@ class BattleSimulator(BaseModel):
         )
         logger.info(f"Average number of rounds per battle: {avg_rounds:.2f}")
 
-    #@profile
     def run_multiple_battles(self, num_battles: int) -> tuple[dict[str, int], float]:
         results: dict[str, int] = {"combatant_a": 0, "combatant_b": 0}
         total_rounds = 0
