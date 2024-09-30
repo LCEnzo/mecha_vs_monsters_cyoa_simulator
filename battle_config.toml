@@ -11,6 +11,12 @@ combatant_b = "Suit"
 terrain = "Hela"
 
 [[battles]]
+name="Test Terrain Badaxsan"
+combatant_a = "LCEnzo"
+combatant_b = "LCEnzo"
+terrain = "Badaxsan"
+
+[[battles]]
 name="First Battle v2"
 combatant_a = "LCEnzo"
 combatant_b = "Shinigami"

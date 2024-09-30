@@ -125,11 +125,33 @@ ruthenian_grasses = Terrain(
     condition=at_start_cond,
 )
 
+
+# Badaxsan
+def badaxsan_effect(self: Terrain, engine: CombatEngine):
+    def check_attack_dmg(
+        self: Combatant, damage: int, armor_dmg: int, shields_dmg: int, damage_type: AttackType
+    ) -> None:
+        if damage >= 40 and damage_type == AttackType.BALLISTIC:
+            self.velocity -= 4
+
+    for combatant in [engine.combatant_a, engine.combatant_b]:
+        combatant.on_damage_taken_effects.append(check_attack_dmg)
+
+
+badaxsan = Terrain(
+    name="Badaxsan",
+    description=("Whenever a combatant takes Ballistics damage, reduce their Velocity by up to 4."),
+    effect=badaxsan_effect,
+    condition=at_start_cond,
+)
+
+
 terrains: dict[str, Terrain] = {
     "Hela": hela,
     "Lake Tampua": lake_tampua,
     # "Malvinas": malvinas,
     "Okavango": okavango,
     "Ruthenian Grasses": ruthenian_grasses,
+    "Badaxsan": badaxsan,
     # Add more terrains to this dictionary...
 }
