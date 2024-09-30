@@ -1,12 +1,8 @@
-from unittest.mock import MagicMock
-
-from picologging import Logger
-
 from mvm.core import BattleSimulator, CombatEngine
 from tests.utils import create_combatant
 
 
-def test_can_do_battle_without_terrain():
+def test_can_do_battle_without_terrain() -> None:
     c = create_combatant(50, 50, 10, 10, 10)
     engine = CombatEngine(combatant_a=c, combatant_b=c.model_copy(deep=True))
     engine.start_battle()
@@ -18,9 +14,7 @@ def test_can_do_battle_without_terrain():
     )
 
 
-def test_can_repeat_battle_alot():
-    simulator = MagicMock(spec=Logger)
-
+def test_can_repeat_battle_alot() -> None:
     c = create_combatant(50, 50, 10, 10, 10)
     engine = CombatEngine(combatant_a=c.model_copy(deep=True), combatant_b=c.model_copy(deep=True))
     simulator = BattleSimulator(
