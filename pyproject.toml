@@ -37,6 +37,10 @@ exclude = [
 	"alembic"
 ]
 
+[tool.ruff.format]
+# indent-style = "tab"
+docstring-code-format = true
+
 [tool.ruff.lint.flake8-bugbear]
 extend-immutable-calls = ["fastapi.Depends", "fastapi.params.Depends", "fastapi.Query", "fastapi.params.Query"]
 

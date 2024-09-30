@@ -325,10 +325,12 @@ class BattleSimulator(BaseModel):
 
         terrain_txt = "No terrain loaded."
         if self.terrain:
+            # fmt: off
             terrain_txt = (
                 f"--- Terrain: {self.terrain.name} ---\n"
                 f"{self.terrain.description}"
             )
+            # fmt: on
 
         print(
             f"--- Combatant A: {self.combatant_a.name} ---\n"

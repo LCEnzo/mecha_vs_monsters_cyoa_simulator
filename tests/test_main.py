@@ -28,25 +28,25 @@ def mock_simulator():
     return simulator
 
 
-def test_select_from_list_by_number():
+def test_select_from_list_by_number() -> None:
     with patch("builtins.input", return_value="1"):
         result = select_from_list(mock_combatants, "combatant")
     assert result.name == "Mech1"
 
 
-def test_select_from_list_by_name():
+def test_select_from_list_by_name() -> None:
     with patch("builtins.input", return_value="Mech2"):
         result = select_from_list(mock_combatants, "combatant")
     assert result.name == "Mech2"
 
 
-def test_select_from_list_invalid_input():
+def test_select_from_list_invalid_input() -> None:
     with patch("builtins.input", side_effect=["invalid", "2"]):
         result = select_from_list(mock_combatants, "combatant")
     assert result.name == "Mech2"
 
 
-def test_run_config_battles(mock_simulator):
+def test_run_config_battles(mock_simulator) -> None:
     mock_battle_config = MagicMock()
     mock_battle = MagicMock()
     mock_battle.name = "Test Battle"
@@ -79,14 +79,16 @@ def test_run_config_battles(mock_simulator):
         (["9", "5", "10"], {"run_multiple_battles": 1}),
     ],
 )
-def test_main_menu_options(mock_simulator, user_input, expected_calls):
-    with patch('builtins.input', side_effect=user_input), \
-         patch('main.BattleSimulator', return_value=mock_simulator), \
-         patch('main.BattleConfig.load_battle_config', return_value=MagicMock(battles=[])), \
-         patch('main.combatants', mock_combatants), \
-         patch('main.terrains', mock_terrains), \
-         patch('builtins.print'):
+def test_main_menu_options(mock_simulator, user_input, expected_calls) -> None:
+    # fmt: off
+    with patch("builtins.input", side_effect=user_input), \
+         patch("main.BattleSimulator", return_value=mock_simulator), \
+         patch("main.BattleConfig.load_battle_config", return_value=MagicMock(battles=[])), \
+         patch("main.combatants", mock_combatants), \
+         patch("main.terrains", mock_terrains), \
+         patch("builtins.print"):
         main()
+    # fmt: on
 
     for method, count in expected_calls.items():
         if method == "terrain" and expected_calls["terrain"] != 0:
@@ -97,12 +99,14 @@ def test_main_menu_options(mock_simulator, user_input, expected_calls):
             assert getattr(mock_simulator, method).call_count == count
 
 
-def test_main_invalid_choice():
-    with patch('builtins.input', side_effect=['invalid', '10']), \
-         patch('main.BattleSimulator', return_value=MagicMock()), \
-         patch('main.BattleConfig.load_battle_config', return_value=MagicMock(battles=[])), \
-         patch('builtins.print') as mock_print:
+def test_main_invalid_choice() -> None:
+    # fmt: off
+    with patch("builtins.input", side_effect=["invalid", "10"]), \
+         patch("main.BattleSimulator", return_value=MagicMock()), \
+         patch("main.BattleConfig.load_battle_config", return_value=MagicMock(battles=[])), \
+         patch("builtins.print") as mock_print:
         main()
+    # fmt: on
 
     mock_print.assert_any_call("Invalid choice. Please try again.")
 

@@ -93,6 +93,7 @@ def riposta_effect(effect_info: Effect, self: Combatant, other: Combatant):
     self.shields += 25
 
 
+# fmt: off
 lcenzo = Combatant(
     name="LCEnzo",
     armor=890,
@@ -124,6 +125,7 @@ lcenzo = Combatant(
         AttackType.FIREPOWER: -60,
     },
 )
+# fmt: on
 
 combatants = {
     "LCEnzo": lcenzo,
