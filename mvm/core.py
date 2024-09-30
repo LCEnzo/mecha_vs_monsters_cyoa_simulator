@@ -15,6 +15,8 @@ from termcolor import colored
 from utils.combat_logging import logger
 from utils.settings import settings
 
+# from line_profiler import profile
+
 
 class AttackType(str, enum.Enum):
     FIREPOWER = "Firepower"
@@ -166,8 +168,9 @@ class Combatant(BaseModel):
 class Terrain(BaseModel):
     name: str
     description: str
-    effect: Callable[[CombatEngine], None]
-    condition: Callable[[CombatEngine, int], bool] = lambda engine, round: True  # Default condition always true
+    effect: Callable[[Self | Terrain, CombatEngine], None]
+    # Default condition always true
+    condition: Callable[[Self | Terrain, CombatEngine], bool] = lambda engine, round: True
     triggered: bool = False
 
     def apply_effect(self, combat_engine: CombatEngine, *args, **kwargs):
@@ -364,9 +367,9 @@ class BattleSimulator(BaseModel):
             return
 
         self.combat_engine = CombatEngine(
-            combatant_a=self.combatant_a.model_copy(deep=True), 
-            combatant_b=self.combatant_b.model_copy(deep=True), 
-            terrain=self.terrain.model_copy(deep=True)
+            combatant_a=self.combatant_a.model_copy(deep=True),
+            combatant_b=self.combatant_b.model_copy(deep=True),
+            terrain=self.terrain.model_copy(deep=True) if self.terrain else None,
         )
         self.combat_engine.start_battle()
 
@@ -406,7 +409,7 @@ class BattleSimulator(BaseModel):
     def run_multiple_battles(self, num_battles: int) -> tuple[dict[str, int], float]:
         results: dict[str, int] = {"combatant_a": 0, "combatant_b": 0}
         total_rounds = 0
-        
+
         if not self.combatant_a or not self.combatant_b:
             logger.warning("Please load both combatants before running multiple battles.")
             if settings.is_debug():

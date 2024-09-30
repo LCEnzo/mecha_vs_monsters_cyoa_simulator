@@ -10,19 +10,21 @@ from mvm.terrains import terrains
 from utils.combat_logging import logger
 from utils.settings import settings  # noqa: F401
 
-T = TypeVar('T', bound=BaseModel)
+T = TypeVar("T", bound=BaseModel)
+
 
 class NamedItem(BaseModel, Generic[T]):
     name: str
     item: T
 
+
 def select_from_list(items: dict[str, T], item_type: str) -> T:
     named_items: list[NamedItem] = [NamedItem(name=name, item=item) for name, item in items.items()]
-    
+
     print(f"\nAvailable {item_type}s:")
     for i, item in enumerate(named_items):
         print(f"{i+1}. {item.name}")
-    
+
     while True:
         choice = input(f"\nSelect a {item_type} (enter name or number): ").strip()
         if choice in items:
