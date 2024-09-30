@@ -27,21 +27,16 @@ jobs:
         pip install -r requirements.txt
         pip install -r requirements-dev.txt
 
-    - name: Run tests with pytest and coverage
+    - name: Run tests and generate coverage
       run: |
-        coverage run -m pytest
-
-    - name: Generate coverage report
-      run: |
-        coverage report
-        coverage xml
+        pytest --cov --cov-report=xml
 
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v4
       with:
         file: ./coverage.xml
         flags: unittests
-        token: ${{ secrets.CODECOV_TOKEN }}      
+        token: ${{ secrets.CODECOV_TOKEN }}
 
     - name: Check types with mypy
       run: |

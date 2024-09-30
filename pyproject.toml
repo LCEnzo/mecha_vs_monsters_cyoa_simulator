@@ -59,3 +59,7 @@ exclude=["migrations", "venv", ".venv", "alembic"]
 testpaths = [
     "tests"
 ]
+
+[tool.coverage.run]
+# source = ["main.py", "mvm", "utils"]
+omit = ["tests/*"]
