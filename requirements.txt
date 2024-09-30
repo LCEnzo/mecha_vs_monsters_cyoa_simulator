@@ -6,4 +6,7 @@ pytest~=8.3.3
 pydantic-settings~=2.5.2
 # The next version (0.9.3) I tried had broken support for asctime in the formatter
 # IDK about 0.9.2
-picologging==0.9.1 
+# OK, new comment here, picologging 0.9.1 and 0.9.2 are causing segfaults when exiting the program. Ugh.
+# So, until a new version is released and tested, we can't use this lib. A shame.
+# Version 0.9.4 is on Github for 2 weeks, but is not on pypi
+# picologging==0.9.2 

@@ -309,29 +309,31 @@ class BattleSimulator(BaseModel):
             logger.error(f"Error loading combatants: {e}")
 
     def load_combatants(self, combatant_a: Combatant, combatant_b: Combatant):
-        self.combatant_a = combatant_a.model_copy()
-        self.combatant_b = combatant_b.model_copy()
+        self.combatant_a = combatant_a.model_copy(deep=True)
+        self.combatant_b = combatant_b.model_copy(deep=True)
 
     def load_terrain(self, terrain: Terrain):
-        self.terrain = terrain.model_copy()
+        self.terrain = terrain.model_copy(deep=True)
 
     def view_combatants_and_terrain(self):
         if not self.combatant_a or not self.combatant_b:
             print("Please load both combatants first.")
             return
 
+        terrain_txt = "No terrain loaded."
+        if self.terrain:
+            terrain_txt = (
+                f"--- Terrain: {self.terrain.name} ---\n"
+                f"{self.terrain.description}"
+            )
+
         print(
             f"--- Combatant A: {self.combatant_a.name} ---\n"
             f"{self._format_combatant_stats(self.combatant_a)}\n\n"
             f"--- Combatant B: {self.combatant_b.name} ---\n"
-            f"{self._format_combatant_stats(self.combatant_b)}"
+            f"{self._format_combatant_stats(self.combatant_b)}\n\n"
+            f"{terrain_txt}"
         )
-
-        if self.terrain:
-            print(f"Terrain: {self.terrain.name}")
-            print(f"Description: {self.terrain.description}")
-        else:
-            print("No terrain loaded.")
 
     def _format_combatant_stats(self, combatant: Combatant) -> str:
         return (
@@ -362,9 +364,9 @@ class BattleSimulator(BaseModel):
             return
 
         self.combat_engine = CombatEngine(
-            combatant_a=self.combatant_a.model_copy(), 
-            combatant_b=self.combatant_b.model_copy(), 
-            terrain=self.terrain.model_copy()
+            combatant_a=self.combatant_a.model_copy(deep=True), 
+            combatant_b=self.combatant_b.model_copy(deep=True), 
+            terrain=self.terrain.model_copy(deep=True)
         )
         self.combat_engine.start_battle()
 
@@ -400,21 +402,25 @@ class BattleSimulator(BaseModel):
         )
         logger.info(f"Average number of rounds per battle: {avg_rounds:.2f}")
 
-    def run_multiple_battles(self, num_battles: int):
-        if not self.combatant_a or not self.combatant_b:
-            logger.warning("Please load both combatants before running multiple battles.")
-            return None
-
+    #@profile
+    def run_multiple_battles(self, num_battles: int) -> tuple[dict[str, int], float]:
         results: dict[str, int] = {"combatant_a": 0, "combatant_b": 0}
         total_rounds = 0
+        
+        if not self.combatant_a or not self.combatant_b:
+            logger.warning("Please load both combatants before running multiple battles.")
+            if settings.is_debug():
+                raise Exception("Expected to have combatants not be None in run_multiple_battles")
+            return results, 0
 
         # Store the original log level of the console handler
-        console_handler = next(
+        handlers = [
             handler
             for handler in logger.handlers
             if isinstance(handler, logging.StreamHandler) and handler.name == "stdout_stream_log"
-        )
-        original_level = console_handler.level
+        ]
+        console_handler = handlers[0] if handlers else None
+        original_level = console_handler.level if console_handler else None
 
         # Temporarily set the console handler to only show WARNING and above
         # console_handler.setLevel(logging.WARNING)
@@ -439,7 +445,7 @@ class BattleSimulator(BaseModel):
 
                 print("")
 
-            console_handler.setLevel(original_level)
+            console_handler.setLevel(original_level) if console_handler and original_level else None
 
             self.print_multiple_battle_results(total_rounds, num_battles, results)
         except Exception as e:
@@ -451,7 +457,7 @@ class BattleSimulator(BaseModel):
             if settings.is_debug():
                 raise e
         finally:
-            console_handler.setLevel(original_level)
+            console_handler.setLevel(original_level) if console_handler and original_level else None
 
         return results, total_rounds / num_battles
 
@@ -477,7 +483,7 @@ class BattleConfig(BaseModel):
     def load_battle_config(file_path: str = "battle_config.toml") -> BattleConfig:
         with open(file_path, "rb") as f:
             data = tomli.load(f)
-        cc = BattleConfig.parse_obj(data)
+        cc = BattleConfig.model_validate(data)
         return cc
 
 

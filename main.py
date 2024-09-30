@@ -1,6 +1,6 @@
 #! python
 
-from typing import Dict, Generic, TypeVar
+from typing import Generic, TypeVar
 
 from pydantic import BaseModel
 
@@ -16,7 +16,7 @@ class NamedItem(BaseModel, Generic[T]):
     name: str
     item: T
 
-def select_from_list(items: Dict[str, T], item_type: str) -> T:
+def select_from_list(items: dict[str, T], item_type: str) -> T:
     named_items: list[NamedItem] = [NamedItem(name=name, item=item) for name, item in items.items()]
     
     print(f"\nAvailable {item_type}s:")
@@ -55,7 +55,7 @@ def main() -> None:
         run_config_battles(battle_config, simulator)
 
     while True:
-        print("\n--- Mech vs Monster Battle Simulator ---")
+        print("\n--- Mecha vs Monster Battle Simulator ---")
         print("1. Load combatants")
         print("2. Load terrain")
         print("3. View combatants")
@@ -102,3 +102,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+    print("")

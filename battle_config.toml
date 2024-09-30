@@ -1,4 +1,10 @@
 [[battles]]
+name="Test Battle"
+combatant_a = "Suit"
+combatant_b = "Shinigami"
+terrain = "Lake Tampua"
+
+[[battles]]
 name="First Battle"
 combatant_a = "LCEnzo"
 combatant_b = "Suit"
@@ -8,4 +14,4 @@ terrain = "Hela"
 name="First Battle v2"
 combatant_a = "LCEnzo"
 combatant_b = "Shinigami"
-terrain = "Hela"
+terrain = "Lake Tampua"
