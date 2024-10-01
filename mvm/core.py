@@ -297,11 +297,11 @@ class BattleSimulator(BaseModel):
     def load_combatants_via_file(self, file_path_a: str, file_path_b: str):
         try:
             if not file_path_a:
-                file_path_a = "combatant_a.toml"
+                file_path_a = "tomls\\combatant_a.toml"
             self.combatant_a = load_combatant(file_path_a)
 
             if not file_path_b:
-                file_path_b = "combatant_b.toml"
+                file_path_b = "tomls\\combatant_b.toml"
             self.combatant_b = load_combatant(file_path_b)
 
             logger.info(f"Loaded {self.combatant_a.name} as combatant A")
@@ -482,7 +482,7 @@ class BattleConfig(BaseModel):
     battles: list[Battle]
 
     @staticmethod
-    def load_battle_config(file_path: str = "battle_config.toml") -> BattleConfig:
+    def load_battle_config(file_path: str = "tomls\\battle_config.toml") -> BattleConfig:
         with open(file_path, "rb") as f:
             data = tomli.load(f)
         cc = BattleConfig.model_validate(data)

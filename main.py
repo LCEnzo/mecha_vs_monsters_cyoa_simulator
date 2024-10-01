@@ -51,7 +51,7 @@ def run_config_battles(battle_config: BattleConfig, simulator: BattleSimulator) 
 
 def main() -> None:
     simulator = BattleSimulator()
-    battle_config = BattleConfig.load_battle_config("battle_config.toml")
+    battle_config = BattleConfig.load_battle_config("tomls\\battle_config.toml")
 
     if battle_config.battles:
         run_config_battles(battle_config, simulator)
