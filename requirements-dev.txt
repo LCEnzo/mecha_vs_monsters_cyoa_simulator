@@ -4,4 +4,4 @@ types-PyYAML
 types-Pygments 
 types-colorama 
 types-setuptools
-ruff~=0.6.8
+ruff~=0.6.9
