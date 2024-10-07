@@ -1,4 +1,4 @@
-tomli~=2.0.1
+tomli~=2.0.2
 tomli_w~=1.0.0
 termcolor~=2.5.0
 pydantic~=2.9.2
