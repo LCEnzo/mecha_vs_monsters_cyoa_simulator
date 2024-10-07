@@ -1,6 +1,6 @@
 tomli~=2.0.1
 tomli_w~=1.0.0
-termcolor~=2.4.0
+termcolor~=2.5.0
 pydantic~=2.9.2
 pytest~=8.3.3
 pydantic-settings~=2.5.2
