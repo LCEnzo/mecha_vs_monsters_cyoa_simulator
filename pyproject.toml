@@ -40,6 +40,7 @@ exclude = [
 [tool.ruff.format]
 # indent-style = "tab"
 docstring-code-format = true
+quote-style = "double"
 
 [tool.ruff.lint.flake8-bugbear]
 extend-immutable-calls = ["fastapi.Depends", "fastapi.params.Depends", "fastapi.Query", "fastapi.params.Query"]
@@ -48,7 +49,11 @@ extend-immutable-calls = ["fastapi.Depends", "fastapi.params.Depends", "fastapi.
 # Allow Pydantic's `@validator` decorator to trigger class method treatment.
 classmethod-decorators = ["classmethod", "pydantic.validator"]
 
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
 [tool.mypy]
+python_version = "3.13"
 plugins = [
 	"pydantic.mypy", 
 	# "sqlalchemy.ext.mypy.plugin"
