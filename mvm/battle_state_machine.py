@@ -49,7 +49,7 @@ class BattleState(ABC, BaseModel):
     terrain: Terrain | None = None
     random_seed: int = Field(default_factory=lambda: random.randint(0, 2**32 - 1))
     rng: random.Random = Field(exclude=True)
-    effect_manager: EffectManager
+    effect_manager: EffectManager = EffectManager()
 
     model_config = ConfigDict(frozen=True)
 
@@ -57,7 +57,6 @@ class BattleState(ABC, BaseModel):
         super().__init__(**data)
 
         # TODO:
-        # self.effect_manager = EffectManager()
         # for effect in self.combatant_a.effects + self.combatant_b.effects:
         #     self.effect_manager.register_effect(effect)
 
