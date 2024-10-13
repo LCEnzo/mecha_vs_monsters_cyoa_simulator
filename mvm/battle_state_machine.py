@@ -22,15 +22,13 @@ from utils.settings import settings
 class EffectManager[T: BattleState]:
     effects: dict[type[BattleState], list[Callable[[T], None]]] = {}
 
-    @classmethod
-    def register_effect(cls, state_type: type[T], effect: Callable[[T], None]):
-        if state_type not in cls.effects:
-            cls.effects[state_type] = []
-        cls.effects[state_type].append(effect)
+    def register_effect(self, state_type: type[T], effect: Callable[[T], None]):
+        if state_type not in self.effects:
+            self.effects[state_type] = []
+        self.effects[state_type].append(effect)
 
-    @classmethod
-    def get_effects(cls, state: T) -> list[Callable[[T], None]]:
-        return cls.effects.get(type(state), [])
+    def get_effects(self, state: T) -> list[Callable[[T], None]]:
+        return self.effects.get(type(state), [])
 
 
 # TODO: Consider how state could be frozen, and the implications on inheritance
@@ -46,12 +44,16 @@ class BattleState(ABC, BaseModel):
     terrain: Terrain | None = None
     random_seed: int = Field(default_factory=lambda: random.randint(0, 2**32 - 1))
     rng: random.Random = Field(default=None, exclude=True)
+    effect_manager: EffectManager
 
     def __init__(self, **data):
         super().__init__(**data)
         self.rng = random.Random(self.random_seed)
 
-    effects: dict[type[child_of(BattleState)], Callable] = {}
+        # TODO:
+        # self.effect_manager = EffectManager()
+        # for effect in self.combatant_a.effects + self.combatant_b.effects:
+        #     self.effect_manager.register_effect(effect)
 
     @abstractmethod
     def transition(self: Self) -> BattleState:
@@ -59,6 +61,10 @@ class BattleState(ABC, BaseModel):
 
     def save_state(self: Self):
         raise NotImplementedError()
+    
+    def apply_effects(self):
+        for effect in EffectManager.get_effects(self):
+            effect(self)
 
 
 class Start(BattleState):
