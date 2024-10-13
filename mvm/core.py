@@ -12,7 +12,7 @@ import tomli_w
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from termcolor import colored
 
-from utils.combat_logging import logger
+from utils.log_util import logger
 from utils.settings import settings
 
 

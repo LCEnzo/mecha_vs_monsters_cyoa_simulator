@@ -1,5 +1,5 @@
 from mvm.core import AttackType, Combatant, CombatEngine, Terrain
-from utils.combat_logging import logger  # noqa: F401
+from utils.log_util import logger  # noqa: F401
 
 
 # Universal
