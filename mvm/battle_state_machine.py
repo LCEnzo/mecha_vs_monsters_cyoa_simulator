@@ -10,6 +10,7 @@ from functools import wraps
 from typing import Callable, TypeIs
 
 from pydantic import BaseModel, ConfigDict, Field
+from termcolor import colored
 
 from mvm.core import AttackType, Combatant, Terrain
 from utils.log_util import logger  # noqa: F401
@@ -171,6 +172,16 @@ class VelocityRoll(BattleState):
         total_velocity_a = ctx.total_velocity_a
         total_velocity_b = ctx.total_velocity_b
         a_is_attacking = ctx.a_is_attacking
+
+        logger.info(
+            f"Round {self.round_count}: {colored(self.combatant_a.name, 'green')} has total velocity "
+            f"{total_velocity_a}, AR: {self.combatant_a.armor} SH: {self.combatant_a.shields} vs "
+            f"{colored(self.combatant_b.name, 'red')} has {total_velocity_b}, "
+            f"AR: {self.combatant_b.armor} SH: {self.combatant_b.shields} "
+            f"on Terrain {colored(self.terrain.name, 'yellow')}"
+            if self.terrain
+            else "without Terrain"
+        )
 
         return TurnStart(
             **self.model_dump(),

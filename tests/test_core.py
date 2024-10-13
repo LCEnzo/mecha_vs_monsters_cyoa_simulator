@@ -16,10 +16,7 @@ def test_can_do_battle_without_terrain() -> None:
 
 def test_can_repeat_battle_alot() -> None:
     c = create_combatant(50, 50, 10, 10, 10)
-    engine = CombatEngine(combatant_a=c.model_copy(deep=True), combatant_b=c.model_copy(deep=True))
-    simulator = BattleSimulator(
-        combat_engine=engine, combatant_a=c.model_copy(deep=True), combatant_b=c.model_copy(deep=True)
-    )
+    simulator = BattleSimulator(main_a=c.model_copy(deep=True), main_b=c.model_copy(deep=True))
     target_round_count = 250
 
     res, avg_round_count = simulator.run_multiple_battles(target_round_count)
