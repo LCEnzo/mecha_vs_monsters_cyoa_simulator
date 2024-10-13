@@ -36,3 +36,7 @@ notes.md
 # Line profiler
 profile_output*.txt
 profile_output*.lprof
+
+# Misc
+.dir*
+.cov*
