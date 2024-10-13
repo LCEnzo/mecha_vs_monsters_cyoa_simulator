@@ -1,17 +1,60 @@
 from __future__ import annotations
 
+import copy
 import random
 import traceback  # noqa: F401
 from abc import ABC, abstractmethod
-from copy import replace
+from dataclasses import dataclass
+from enum import Enum
 from functools import wraps
-from typing import Callable, Self
+from typing import Callable, TypeIs
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from mvm.core import AttackType, Combatant, Terrain
 from utils.log_util import logger  # noqa: F401
 from utils.settings import settings  # noqa: F401
+
+
+class SignalType(Enum):
+    BATTLE_START = "battle_start"
+    ROUND_START = "round_start"
+    PRE_VELOCITY_ROLL = "pre_velocity_roll"
+    POST_VELOCITY_ROLL = "post_velocity_roll"
+    TURN_START = "turn_start"
+    PRE_ATTACK = "pre_attack"
+    POST_HIT_ROLL = "post_hit_roll"
+    POST_DMG_CALC = "post_dmg_calc"
+    POST_DMG_APPLICATION = "post_dmg_application"
+    DAMAGE_CALCULATION = "damage_calculation"
+    POST_ATTACK = "post_attack"
+    TURN_END = "turn_end"
+    ROUND_END = "round_end"
+    BATTLE_END = "battle_end"
+
+
+@dataclass
+class HitRollData:
+    base_roll: int
+    hit_chance: int
+    att_mod: int
+    def_mod: int
+    does_hit: bool
+
+
+@dataclass
+class DamageData:
+    damage: int
+
+
+SignalData = HitRollData | DamageData
+
+
+@dataclass
+class Signal:
+    type: SignalType
+    # Data is unfortunately both input and output
+    data: SignalData | None = None
 
 
 # TODO: move this somehow into BattleState
@@ -24,11 +67,9 @@ def save_before_transition[T: Callable](func: T) -> T:
     return wrapper
 
 
-# TODO: Consider how state could be frozen, and the implications on inheritance
 # TODO: Consider where history should be stored (as part of the BattleState,
 #       as a concern for higher level structs, just dumped into a DB, or w/e)
 class BattleState(ABC, BaseModel):
-    # TODO: Consider storing the random seed as part of the state
     combatant_a: Combatant = Field(exclude=True)
     combatant_b: Combatant = Field(exclude=True)
 
@@ -45,35 +86,13 @@ class BattleState(ABC, BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
-    def __init__(self, **data):
-        super().__init__(**data)
-
-        # TODO:
-        # for effect in self.combatant_a.effects + self.combatant_b.effects:
-        #     self.effect_manager.register_effect(effect)
-
-    def __post_init__(self):
-        # https://stackoverflow.com/questions/53756788/how-to-set-the-value-of-dataclass-field-in-post-init-when-frozen-true
-        object.__setattr__(self, "rng", random.Random(self.random_seed))
-        
-        combatant_a = self.main_a.model_copy()
-        for ca in self.adds_a:
-            combatant_a.merge_inplace(ca)
-        
-        combatant_b = self.main_b.model_copy()
-        for cb in self.adds_b:
-            combatant_b.merge_inplace(cb)
-
-        object.__setattr__(self, "combatant_a", combatant_a)
-        object.__setattr__(self, "combatant_b", combatant_b)
-        
-
-    def apply_effects(self, *args, **kwargs):
-        self.terrain.effect(self, *args, **kwargs)
+    def apply_effects(self, signal: Signal, *args, **kwargs):
+        if self.terrain:
+            self.terrain.effect(self.terrain, self, signal, *args, **kwargs)
         for effect_a in self.combatant_a.effects:
-            effect_a.apply(self, *args, **kwargs)
+            effect_a.apply(self, signal, True, *args, **kwargs)
         for effect_b in self.combatant_b.effects:
-            effect_b.apply(self, *args, **kwargs)
+            effect_b.apply(self, signal, False, *args, **kwargs)
 
     @abstractmethod
     def _transition(self) -> BattleState:
@@ -83,94 +102,227 @@ class BattleState(ABC, BaseModel):
         self.save_state()
         return self._transition()
 
-    def save_state(self: Self):
+    def save_state(self):
         raise NotImplementedError()
+
+    def had_someone_died(self) -> bool:
+        return self.combatant_a.is_dead() or self.combatant_b.is_dead()
 
 
 class Start(BattleState):
-    def _transition(self: Self) -> VelocityRoll:
-        # call effects
-        return VelocityRoll(**self.model_dump())
+    def __init__(self, **data):
+        super().__init__(**data)
+
+        # https://stackoverflow.com/questions/53756788/how-to-set-the-value-of-dataclass-field-in-post-init-when-frozen-true
+        object.__setattr__(self, "rng", random.Random(self.random_seed))
+
+        combatant_a = self.main_a.model_copy(deep=True)
+        for ca in self.adds_a:
+            combatant_a.merge_inplace(ca)
+
+        combatant_b = self.main_b.model_copy(deep=True)
+        for cb in self.adds_b:
+            combatant_b.merge_inplace(cb)
+
+        object.__setattr__(self, "combatant_a", combatant_a)
+        object.__setattr__(self, "combatant_b", combatant_b)
+
+    def _transition(self) -> RoundStart:
+        self.apply_effects(Signal(SignalType.BATTLE_START))
+        return RoundStart(**self.model_dump())
 
 
 class RoundStart(BattleState):
-    def _transition(self: Self) -> VelocityRoll:
-        # call effects
-
-        return VelocityRoll(replace(self, round_count=self.round_count + 1).model_dump())
+    def _transition(self) -> VelocityRoll:
+        new_state = copy.replace(self, round_count=self.round_count + 1)
+        new_state.apply_effects(Signal(SignalType.ROUND_START))
+        return VelocityRoll(**new_state.model_dump())
 
 
 class VelocityRoll(BattleState):
-    def _transition(self: Self) -> TurnStart:
-        # call preroll effects
-        # roll combatants
-        raise NotImplementedError()
+    # Included as fields, so that effects can modify them
+    roll_a: int = Field(frozen=False)
+    roll_b: int = Field(frozen=False)
+    total_velocity_a: int = Field(frozen=False)
+    total_velocity_b: int = Field(frozen=False)
+    a_is_attacking: bool = Field(frozen=False)
+
+    def _transition(self) -> TurnStart:
+        self.apply_effects(Signal(SignalType.PRE_VELOCITY_ROLL))
+
+        self.roll_a = self.rng.randint(1, 1000)
+        self.roll_b = self.rng.randint(1, 1000)
+        self.total_velocity_a = self.combatant_a.velocity + self.roll_a
+        self.total_velocity_b = self.combatant_b.velocity + self.roll_b
+        self.a_is_attacking = self.total_velocity_a >= self.total_velocity_b
+
+        self.apply_effects(Signal(SignalType.POST_VELOCITY_ROLL))
+
+        return TurnStart(
+            **self.model_dump(),
+            a_is_attacking=self.a_is_attacking,
+            has_a_finished_their_turn=False,
+            has_b_finished_their_turn=False,
+        )
 
 
-class TurnStart(BattleState):
-    is_a_attacking: bool
+class TurnState(BattleState, ABC):
+    a_is_attacking: bool
     has_a_finished_their_turn: bool
     has_b_finished_their_turn: bool
 
-    def _transition(self: Self) -> FirepowerAttack:
-        raise NotImplementedError()
+
+class AttackState(TurnState, ABC):
+    att_type: AttackType
+
+    def process_attack(self) -> None:
+        att_type = self.att_type
+
+        if settings.is_debug():
+            assert att_type is not None
+
+        if not self.is_att_type(att_type):
+            logger.warning(
+                f"Trying to calculate_hit with state ({type(self)}) and att_type ({att_type}). Whole state: {self}"
+            )
+            return None
+
+        self.apply_effects(Signal(SignalType.PRE_ATTACK))
+
+        attacker = self.combatant_a if self.a_is_attacking else self.combatant_b
+        defender = self.combatant_b if self.a_is_attacking else self.combatant_a
+
+        does_hit: bool = self.calculate_hit(attacker, defender)
+        if does_hit:
+            damage = self.get_damage(attacker, defender)
+            self.apply_effects(Signal(SignalType.POST_DMG_CALC, DamageData(damage)))
+            damage = DamageData.damage
+
+            applied_damage = defender.apply_damage(damage, att_type)
+            self.apply_effects(Signal(SignalType.POST_DMG_APPLICATION, DamageData(applied_damage)))
+            logger.info(f"{attacker.name} hits {defender.name} with {att_type.value} for {applied_damage} damage")
+        else:
+            logger.info(f"{attacker.name} misses {defender.name} with {att_type.value}")
+
+    def calculate_hit(self, attacker: Combatant, defender: Combatant) -> bool:
+        """Calculate whether an attack hits, taking into account modifiers."""
+        att_type = self.att_type
+
+        if settings.is_debug():
+            assert att_type is not None
+
+        if not self.is_att_type(att_type):
+            logger.warning(
+                f"Trying to calculate_hit with state ({type(self)}) and att_type ({att_type})." f" Whole state: {self}"
+            )
+            return False
+
+        base_hit = self.rng.randint(0, 1000)
+        attacker.on_hit_roll(base_hit, self.att_type)
+        hit_chance = (attacker.velocity - defender.velocity) // 2
+
+        att_mod = attacker.modifiers.get("attack_hit_chance_mod", {}).get(att_type.value, 0)
+        def_mod = defender.modifiers.get("defense_hit_chance_mod", {}).get(att_type.value, 0)
+
+        does_hit = base_hit + att_mod - def_mod >= 500 - hit_chance
+        ctx = HitRollData(
+            base_roll=base_hit, hit_chance=hit_chance, att_mod=att_mod, def_mod=def_mod, does_hit=does_hit
+        )
+        self.apply_effects(Signal(SignalType.POST_HIT_ROLL, data=ctx))
+        does_hit = ctx.does_hit
+
+        logger.debug(
+            f"Attack ({attacker.name}) calc hit: {(base_hit, hit_chance, att_mod, def_mod) = } -> {does_hit = }"
+        )
+        self.apply_effects(Signal(SignalType.POST_ATTACK))
+
+        return does_hit
+
+    def get_damage(self, attacker: Combatant, defender: Combatant) -> int:
+        return attacker.get_damage(self.att_type)
+
+    def is_att_type(self, val: object) -> TypeIs[AttackType]:
+        return isinstance(val, AttackType)
 
 
-class FirepowerAttack(BattleState):
-    is_a_attacking: bool
-    has_a_finished_their_turn: bool
-    has_b_finished_their_turn: bool
+class TurnStart(TurnState):
+    def _transition(self) -> FirepowerAttack:
+        self.apply_effects(Signal(SignalType.TURN_START))
+        return FirepowerAttack(**self.model_dump())
+
+
+class FirepowerAttack(AttackState):
     att_type: AttackType = Field(default=AttackType.FIREPOWER, frozen=True)
 
-    def _transition(self: Self) -> BallisticsAttack | TurnEnd:
-        raise NotImplementedError()
+    def _transition(self) -> BallisticsAttack | TurnEnd:
+        self.process_attack()
+        if self.had_someone_died():
+            return TurnEnd(**self.model_dump())
+        return BallisticsAttack(**self.model_dump())
 
 
-class BallisticsAttack(BattleState):
-    is_a_attacking: bool
-    has_a_finished_their_turn: bool
-    has_b_finished_their_turn: bool
+class BallisticsAttack(AttackState):
     att_type: AttackType = Field(default=AttackType.BALLISTIC, frozen=True)
 
-    def _transition(self: Self) -> ChemicalAttack | TurnEnd:
-        raise NotImplementedError()
+    def _transition(self) -> ChemicalAttack | TurnEnd:
+        self.process_attack()
+        if self.had_someone_died():
+            return TurnEnd(**self.model_dump())
+        return ChemicalAttack(**self.model_dump())
 
 
-class ChemicalAttack(BattleState):
-    is_a_attacking: bool
-    has_a_finished_their_turn: bool
-    has_b_finished_their_turn: bool
+class ChemicalAttack(AttackState):
     att_type: AttackType = Field(default=AttackType.CHEMICAL, frozen=True)
 
-    def _transition(self: Self) -> TurnEnd:
-        raise NotImplementedError()
+    def _transition(self) -> TurnEnd:
+        self.process_attack()
+        return TurnEnd(**self.model_dump())
 
 
-class TurnEnd(BattleState):
-    is_a_attacking: bool
-    has_a_finished_their_turn: bool
-    has_b_finished_their_turn: bool
+class TurnEnd(TurnState):
+    def _transition(self) -> RoundEnd | TurnStart:
+        a_finished = self.has_a_finished_their_turn
+        b_finished = self.has_b_finished_their_turn
 
-    def _transition(self: Self) -> RoundEnd | TurnStart:
-        # call turn end effects
-        if self.combatant_a.is_dead() or self.combatant_b.is_dead():
+        if self.a_is_attacking:
+            a_finished = True
+        else:
+            b_finished = True
+
+        self.apply_effects(Signal(SignalType.TURN_END))
+
+        if self.had_someone_died():
+            # This is fine, we don't need to update the state, as RoundEnd does not track who finished their turn
             return RoundEnd(**self.model_dump())
 
-        if self.has_a_finished_their_turn and self.has_b_finished_their_turn:
+        if a_finished and b_finished:
+            # This is fine, we don't need to update the state, as RoundEnd does not track who finished their turn
             return RoundEnd(**self.model_dump())
 
-        raise NotImplementedError()
+        new_state = copy.replace(self, a_is_attacking=not self.a_is_attacking)
+        return TurnStart(**new_state.model_dump())
 
 
 class RoundEnd(BattleState):
-    def _transition(self: Self) -> End | RoundStart:
-        # call post round effects
-        if self.combatant_a.is_dead() or self.combatant_b.is_dead():
+    def _transition(self) -> End | RoundStart:
+        self.apply_effects(Signal(SignalType.ROUND_END))
+
+        if self.had_someone_died():
+            self.apply_effects(Signal(SignalType.BATTLE_END))
             return End(**self.model_dump())
 
-        raise NotImplementedError()
+        return RoundStart(**self.model_dump())
 
 
 class End(BattleState):
-    def _transition(self: Self) -> End:
+    def __post_init__(self):
+        ret = None
+        # ret = super().__post_init__()
+        self.save_state()
+        return ret
+
+    def transition(self) -> End:
+        raise Exception("Can't transition from End state")
+
+    def _transition(self) -> End:
         return self

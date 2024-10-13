@@ -12,7 +12,16 @@ import tomli_w
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from termcolor import colored
 
-from mvm.battle_state_machine import BattleState, RoundStart
+from mvm.battle_state_machine import (
+    BallisticsAttack,
+    BattleState,
+    ChemicalAttack,
+    FirepowerAttack,
+    RoundStart,
+    Signal,
+    SignalType,
+    TurnEnd,
+)
 from utils.log_util import logger
 from utils.settings import settings
 
@@ -26,21 +35,19 @@ class AttackType(str, enum.Enum):
 Ts = TypeVarTuple("Ts")  # for *args
 
 
-class Effect(BaseModel):
+class Effect[StateT: BattleState](BaseModel):
     name: str
-    trigger_condition: Callable[[Self | Effect, Combatant, Combatant, bool, AttackType | None, Unpack[Ts]], bool]
-    effect_func: Callable[[Self | Effect, Combatant, Combatant, Unpack[Ts]], None]
+    trigger_condition: Callable[[Self | Effect, StateT, Signal, bool, Unpack[Ts]], bool]
+    effect_func: Callable[[Self | Effect, StateT, Signal, bool, Unpack[Ts]], None]
     trigger_count: int = Field(default=0, ge=0)
-    target_state: type[BattleState] | None = Field(default=None, frozen=True)
+    target_state: type[StateT] | None = Field(default=None, frozen=True)
 
     def apply(
         self,
-        curr_state: BattleState,
+        curr_state: StateT,
+        signal: Signal,
         effect_from_a: bool,
-        end_of_turn: bool = False,
-        end_of_attack: bool = False,
         hit_roll: bool = False,  # Whether or not an attack landed
-        att_type: AttackType | None = None,
         *args,
         **kwargs,
     ) -> None:
@@ -50,6 +57,12 @@ class Effect(BaseModel):
         combatant = curr_state.combatant_a if effect_from_a else curr_state.combatant_b
         other = curr_state.combatant_b if effect_from_a else curr_state.combatant_a
         start_of_round = isinstance(curr_state, RoundStart)
+        is_attack = isinstance(curr_state, (FirepowerAttack, BallisticsAttack, ChemicalAttack))
+        att_type = (
+            curr_state.att_type if isinstance(curr_state, (FirepowerAttack, BallisticsAttack, ChemicalAttack)) else None
+        )
+        end_of_turn = isinstance(curr_state, TurnEnd)
+        # end_of_attack = is_attack and signal.type in [SignalType.POST_ATTACK]
 
         try:
             if self.trigger_condition(self, combatant, other, hit_roll, att_type, *args, **kwargs):
@@ -94,9 +107,9 @@ class Combatant(BaseModel):
         if v < 0:
             raise ValueError("Value must be non-negative")
         return v
-    
+
     def merge(self, other: Combatant) -> Combatant:
-        c = self.model_copy()
+        c = self.model_copy(deep=True)
         c.merge_inplace(other)
         return c
 
@@ -106,7 +119,7 @@ class Combatant(BaseModel):
         self.ballistics += other.ballistics
         self.firepower += other.firepower
         self.velocity += other.velocity
-        self.effects.extend(other.effects) 
+        self.effects.extend(other.effects)
 
     def on_damage_taken(self, damage: int, armor_dmg: int, shields_dmg: int, damage_type: AttackType) -> None:
         for effect in self.on_damage_taken_effects:
@@ -187,14 +200,14 @@ class Combatant(BaseModel):
 class Terrain(BaseModel):
     name: str
     description: str
-    effect: Callable[[Self | Terrain, BattleState], None]
+    effect: Callable[[Self | Terrain, BattleState, Signal], None]
     # Default condition always true
-    condition: Callable[[Self | Terrain, CombatEngine], bool] = lambda engine, round: True
+    condition: Callable[[Self | Terrain, BattleState, Signal], bool] = lambda engine, round: True
     triggered: bool = False
 
-    def apply_effect(self, combat_engine: CombatEngine, *args, **kwargs):
-        if self.condition(self, combat_engine, *args, **kwargs):
-            self.effect(self, combat_engine, *args, **kwargs)
+    def apply_effect(self, state: BattleState, pre_action: bool, *args, **kwargs):
+        if self.condition(self, state, *args, **kwargs):
+            self.effect(self, state, *args, **kwargs)
             self.triggered = True
             logger.info(f"Executed terrain {colored(self.name, 'yellow')}")
 
