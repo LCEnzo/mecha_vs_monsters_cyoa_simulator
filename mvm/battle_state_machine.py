@@ -48,24 +48,30 @@ class BattleState(ABC, BaseModel):
     round_count: int = 0
     terrain: Terrain | None = None
     random_seed: int = Field(default_factory=lambda: random.randint(0, 2**32 - 1))
-    rng: random.Random = Field(exclude=True, frozen=False, const=True)
+    rng: random.Random = Field(exclude=True)
     effect_manager: EffectManager
 
     model_config = ConfigDict(frozen=True)
 
     def __init__(self, **data):
         super().__init__(**data)
-        self.rng = random.Random(self.random_seed)
 
         # TODO:
         # self.effect_manager = EffectManager()
         # for effect in self.combatant_a.effects + self.combatant_b.effects:
         #     self.effect_manager.register_effect(effect)
 
+    def __post_init__(self):
+        # https://stackoverflow.com/questions/53756788/how-to-set-the-value-of-dataclass-field-in-post-init-when-frozen-true
+        object.__setattr__(self, "rng", random.Random(self.random_seed))
+
     @abstractmethod
-    @save_before_transition
-    def transition(self: Self) -> BattleState:
+    def _transition(self) -> BattleState:
         pass
+
+    def transition(self) -> BattleState:
+        self.save_state()
+        return self._transition()
 
     def save_state(self: Self):
         raise NotImplementedError()
@@ -76,20 +82,20 @@ class BattleState(ABC, BaseModel):
 
 
 class Start(BattleState):
-    def transition(self: Self) -> VelocityRoll:
+    def _transition(self: Self) -> VelocityRoll:
         # call effects
         return VelocityRoll(**self.model_dump())
 
 
 class RoundStart(BattleState):
-    def transition(self: Self) -> VelocityRoll:
+    def _transition(self: Self) -> VelocityRoll:
         # call effects
 
         return VelocityRoll(replace(self, round_count=self.round_count + 1).model_dump())
 
 
 class VelocityRoll(BattleState):
-    def transition(self: Self) -> TurnStart:
+    def _transition(self: Self) -> TurnStart:
         # call preroll effects
         # roll combatants
         raise NotImplementedError()
@@ -100,7 +106,7 @@ class TurnStart(BattleState):
     has_a_finished_their_turn: bool
     has_b_finished_their_turn: bool
 
-    def transition(self: Self) -> FirepowerAttack:
+    def _transition(self: Self) -> FirepowerAttack:
         raise NotImplementedError()
 
 
@@ -109,7 +115,7 @@ class FirepowerAttack(BattleState):
     has_a_finished_their_turn: bool
     has_b_finished_their_turn: bool
 
-    def transition(self: Self) -> BallisticsAttack | TurnEnd:
+    def _transition(self: Self) -> BallisticsAttack | TurnEnd:
         raise NotImplementedError()
 
 
@@ -118,7 +124,7 @@ class BallisticsAttack(BattleState):
     has_a_finished_their_turn: bool
     has_b_finished_their_turn: bool
 
-    def transition(self: Self) -> ChemicalAttack | TurnEnd:
+    def _transition(self: Self) -> ChemicalAttack | TurnEnd:
         raise NotImplementedError()
 
 
@@ -127,7 +133,7 @@ class ChemicalAttack(BattleState):
     has_a_finished_their_turn: bool
     has_b_finished_their_turn: bool
 
-    def transition(self: Self) -> TurnEnd:
+    def _transition(self: Self) -> TurnEnd:
         raise NotImplementedError()
 
 
@@ -136,7 +142,7 @@ class TurnEnd(BattleState):
     has_a_finished_their_turn: bool
     has_b_finished_their_turn: bool
 
-    def transition(self: Self) -> RoundEnd | TurnStart:
+    def _transition(self: Self) -> RoundEnd | TurnStart:
         # call turn end effects
         if self.combatant_a.is_dead() or self.combatant_b.is_dead():
             return RoundEnd(**self.model_dump())
@@ -148,7 +154,7 @@ class TurnEnd(BattleState):
 
 
 class RoundEnd(BattleState):
-    def transition(self: Self) -> End | RoundStart:
+    def _transition(self: Self) -> End | RoundStart:
         # call post round effects
         if self.combatant_a.is_dead() or self.combatant_b.is_dead():
             return End(**self.model_dump())
@@ -157,5 +163,5 @@ class RoundEnd(BattleState):
 
 
 class End(BattleState):
-    def transition(self: Self) -> End:
+    def _transition(self: Self) -> End:
         return self
