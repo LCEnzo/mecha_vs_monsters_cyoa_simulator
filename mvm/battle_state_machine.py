@@ -4,6 +4,7 @@ import random
 import traceback  # noqa: F401
 from abc import ABC, abstractmethod
 from copy import replace
+from functools import wraps
 from typing import Callable, Self
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -25,6 +26,16 @@ class EffectManager[T: BattleState]:
         return self.effects.get(type(state), [])
 
 
+# TODO: move this somehow into BattleState
+def save_before_transition[T: Callable](func: T) -> T:
+    @wraps
+    def wrapper(self, *args, **kwargs):
+        self.save_state()
+        return func(self, *args, **kwargs)
+
+    return wrapper
+
+
 # TODO: Consider how state could be frozen, and the implications on inheritance
 # TODO: Consider where history should be stored (as part of the BattleState,
 #       as a concern for higher level structs, just dumped into a DB, or w/e)
@@ -37,7 +48,7 @@ class BattleState(ABC, BaseModel):
     round_count: int = 0
     terrain: Terrain | None = None
     random_seed: int = Field(default_factory=lambda: random.randint(0, 2**32 - 1))
-    rng: random.Random = Field(exclude=True)
+    rng: random.Random = Field(exclude=True, frozen=False, const=True)
     effect_manager: EffectManager
 
     model_config = ConfigDict(frozen=True)
@@ -52,6 +63,7 @@ class BattleState(ABC, BaseModel):
         #     self.effect_manager.register_effect(effect)
 
     @abstractmethod
+    @save_before_transition
     def transition(self: Self) -> BattleState:
         pass
 
@@ -65,14 +77,12 @@ class BattleState(ABC, BaseModel):
 
 class Start(BattleState):
     def transition(self: Self) -> VelocityRoll:
-        self.save_state()
         # call effects
         return VelocityRoll(**self.model_dump())
 
 
 class RoundStart(BattleState):
     def transition(self: Self) -> VelocityRoll:
-        self.save_state()
         # call effects
 
         return VelocityRoll(replace(self, round_count=self.round_count + 1).model_dump())
@@ -80,7 +90,6 @@ class RoundStart(BattleState):
 
 class VelocityRoll(BattleState):
     def transition(self: Self) -> TurnStart:
-        self.save_state()
         # call preroll effects
         # roll combatants
         raise NotImplementedError()
@@ -92,7 +101,6 @@ class TurnStart(BattleState):
     has_b_finished_their_turn: bool
 
     def transition(self: Self) -> FirepowerAttack:
-        self.save_state()
         raise NotImplementedError()
 
 
@@ -102,7 +110,6 @@ class FirepowerAttack(BattleState):
     has_b_finished_their_turn: bool
 
     def transition(self: Self) -> BallisticsAttack | TurnEnd:
-        self.save_state()
         raise NotImplementedError()
 
 
@@ -112,7 +119,6 @@ class BallisticsAttack(BattleState):
     has_b_finished_their_turn: bool
 
     def transition(self: Self) -> ChemicalAttack | TurnEnd:
-        self.save_state()
         raise NotImplementedError()
 
 
@@ -122,7 +128,6 @@ class ChemicalAttack(BattleState):
     has_b_finished_their_turn: bool
 
     def transition(self: Self) -> TurnEnd:
-        self.save_state()
         raise NotImplementedError()
 
 
@@ -132,7 +137,6 @@ class TurnEnd(BattleState):
     has_b_finished_their_turn: bool
 
     def transition(self: Self) -> RoundEnd | TurnStart:
-        self.save_state()
         # call turn end effects
         if self.combatant_a.is_dead() or self.combatant_b.is_dead():
             return RoundEnd(**self.model_dump())
@@ -145,7 +149,6 @@ class TurnEnd(BattleState):
 
 class RoundEnd(BattleState):
     def transition(self: Self) -> End | RoundStart:
-        self.save_state()
         # call post round effects
         if self.combatant_a.is_dead() or self.combatant_b.is_dead():
             return End(**self.model_dump())
