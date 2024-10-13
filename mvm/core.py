@@ -12,6 +12,7 @@ import tomli_w
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from termcolor import colored
 
+from mvm.battle_state_machine import BattleState, RoundStart
 from utils.log_util import logger
 from utils.settings import settings
 
@@ -30,12 +31,12 @@ class Effect(BaseModel):
     trigger_condition: Callable[[Self | Effect, Combatant, Combatant, bool, AttackType | None, Unpack[Ts]], bool]
     effect_func: Callable[[Self | Effect, Combatant, Combatant, Unpack[Ts]], None]
     trigger_count: int = Field(default=0, ge=0)
+    target_state: type[BattleState] | None = Field(default=None, frozen=True)
 
     def apply(
         self,
-        combatant: Combatant,
-        other: Combatant,
-        start_of_round: bool = False,
+        curr_state: BattleState,
+        effect_from_a: bool,
         end_of_turn: bool = False,
         end_of_attack: bool = False,
         hit_roll: bool = False,  # Whether or not an attack landed
@@ -43,6 +44,13 @@ class Effect(BaseModel):
         *args,
         **kwargs,
     ) -> None:
+        if self.target_state is not None and not isinstance(curr_state, self.target_state):
+            return None
+
+        combatant = curr_state.combatant_a if effect_from_a else curr_state.combatant_b
+        other = curr_state.combatant_b if effect_from_a else curr_state.combatant_a
+        start_of_round = isinstance(curr_state, RoundStart)
+
         try:
             if self.trigger_condition(self, combatant, other, hit_roll, att_type, *args, **kwargs):
                 self.effect_func(self, combatant, other, *args, **kwargs)
@@ -86,6 +94,19 @@ class Combatant(BaseModel):
         if v < 0:
             raise ValueError("Value must be non-negative")
         return v
+    
+    def merge(self, other: Combatant) -> Combatant:
+        c = self.model_copy()
+        c.merge_inplace(other)
+        return c
+
+    def merge_inplace(self, other: Combatant) -> None:
+        self.armor += other.armor
+        self.shields += other.shields
+        self.ballistics += other.ballistics
+        self.firepower += other.firepower
+        self.velocity += other.velocity
+        self.effects.extend(other.effects) 
 
     def on_damage_taken(self, damage: int, armor_dmg: int, shields_dmg: int, damage_type: AttackType) -> None:
         for effect in self.on_damage_taken_effects:
@@ -158,15 +179,15 @@ class Combatant(BaseModel):
     def is_dead(self) -> bool:
         return self.armor <= 0
 
-    def apply_effects(self, other: Combatant, *args, **kwargs):
-        for effect in self.effects:
-            effect.apply(self, other, *args, **kwargs)
+    # def apply_effects(self, other: Combatant, *args, **kwargs):
+    #     for effect in self.effects:
+    #         effect.apply(self, other, *args, **kwargs)
 
 
 class Terrain(BaseModel):
     name: str
     description: str
-    effect: Callable[[Self | Terrain, CombatEngine], None]
+    effect: Callable[[Self | Terrain, BattleState], None]
     # Default condition always true
     condition: Callable[[Self | Terrain, CombatEngine], bool] = lambda engine, round: True
     triggered: bool = False
@@ -213,8 +234,8 @@ class CombatEngine(BaseModel):
         else:
             first, second = (self.combatant_b, self.combatant_a)
 
-        first.apply_effects(second, start_of_round=True)
-        second.apply_effects(first, start_of_round=True)
+        # first.apply_effects(second, start_of_round=True)
+        # second.apply_effects(first, start_of_round=True)
 
         self.process_turn(first, second)
         if not second.is_dead():
@@ -237,8 +258,8 @@ class CombatEngine(BaseModel):
         else:
             logger.info(f"{attacker.name} misses {defender.name} with {att_type.value}")
 
-        attacker.apply_effects(defender, end_of_attack=True, hit_roll=hit_roll, att_type=att_type)
-        defender.apply_effects(attacker, end_of_attack=True, hit_roll=hit_roll, att_type=att_type)
+        # attacker.apply_effects(defender, end_of_attack=True, hit_roll=hit_roll, att_type=att_type)
+        # defender.apply_effects(attacker, end_of_attack=True, hit_roll=hit_roll, att_type=att_type)
 
     def calculate_hit(self, attacker: Combatant, defender: Combatant, att_type: AttackType) -> bool:
         """Calculate whether an attack hits, taking into account modifiers."""

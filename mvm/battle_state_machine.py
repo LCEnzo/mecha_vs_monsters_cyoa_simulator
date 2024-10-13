@@ -9,21 +9,9 @@ from typing import Callable, Self
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from mvm.core import Combatant, Terrain
+from mvm.core import AttackType, Combatant, Terrain
 from utils.log_util import logger  # noqa: F401
 from utils.settings import settings  # noqa: F401
-
-
-class EffectManager[T: BattleState]:
-    effects: dict[type[BattleState], list[Callable[[T], None]]] = {}
-
-    def register_effect(self, state_type: type[T], effect: Callable[[T], None]) -> None:
-        if state_type not in self.effects:
-            self.effects[state_type] = []
-        self.effects[state_type].append(effect)
-
-    def get_effects(self, state: T) -> list[Callable[[T], None]]:
-        return self.effects.get(type(state), [])
 
 
 # TODO: move this somehow into BattleState
@@ -41,15 +29,19 @@ def save_before_transition[T: Callable](func: T) -> T:
 #       as a concern for higher level structs, just dumped into a DB, or w/e)
 class BattleState(ABC, BaseModel):
     # TODO: Consider storing the random seed as part of the state
-    combatant_a: Combatant
-    adds_a: list
-    combatant_b: Combatant
-    adds_b: list
-    round_count: int = 0
+    combatant_a: Combatant = Field(exclude=True)
+    combatant_b: Combatant = Field(exclude=True)
+
+    main_a: Combatant
+    adds_a: list[Combatant]
+    main_b: Combatant
+    adds_b: list[Combatant]
+
     terrain: Terrain | None = None
+
+    round_count: int = 0
     random_seed: int = Field(default_factory=lambda: random.randint(0, 2**32 - 1))
     rng: random.Random = Field(exclude=True)
-    effect_manager: EffectManager = EffectManager()
 
     model_config = ConfigDict(frozen=True)
 
@@ -63,6 +55,25 @@ class BattleState(ABC, BaseModel):
     def __post_init__(self):
         # https://stackoverflow.com/questions/53756788/how-to-set-the-value-of-dataclass-field-in-post-init-when-frozen-true
         object.__setattr__(self, "rng", random.Random(self.random_seed))
+        
+        combatant_a = self.main_a.model_copy()
+        for ca in self.adds_a:
+            combatant_a.merge_inplace(ca)
+        
+        combatant_b = self.main_b.model_copy()
+        for cb in self.adds_b:
+            combatant_b.merge_inplace(cb)
+
+        object.__setattr__(self, "combatant_a", combatant_a)
+        object.__setattr__(self, "combatant_b", combatant_b)
+        
+
+    def apply_effects(self, *args, **kwargs):
+        self.terrain.effect(self, *args, **kwargs)
+        for effect_a in self.combatant_a.effects:
+            effect_a.apply(self, *args, **kwargs)
+        for effect_b in self.combatant_b.effects:
+            effect_b.apply(self, *args, **kwargs)
 
     @abstractmethod
     def _transition(self) -> BattleState:
@@ -74,10 +85,6 @@ class BattleState(ABC, BaseModel):
 
     def save_state(self: Self):
         raise NotImplementedError()
-
-    def apply_effects(self):
-        for effect in self.effect_manager.get_effects(self):
-            effect(self)
 
 
 class Start(BattleState):
@@ -113,6 +120,7 @@ class FirepowerAttack(BattleState):
     is_a_attacking: bool
     has_a_finished_their_turn: bool
     has_b_finished_their_turn: bool
+    att_type: AttackType = Field(default=AttackType.FIREPOWER, frozen=True)
 
     def _transition(self: Self) -> BallisticsAttack | TurnEnd:
         raise NotImplementedError()
@@ -122,6 +130,7 @@ class BallisticsAttack(BattleState):
     is_a_attacking: bool
     has_a_finished_their_turn: bool
     has_b_finished_their_turn: bool
+    att_type: AttackType = Field(default=AttackType.BALLISTIC, frozen=True)
 
     def _transition(self: Self) -> ChemicalAttack | TurnEnd:
         raise NotImplementedError()
@@ -131,6 +140,7 @@ class ChemicalAttack(BattleState):
     is_a_attacking: bool
     has_a_finished_their_turn: bool
     has_b_finished_their_turn: bool
+    att_type: AttackType = Field(default=AttackType.CHEMICAL, frozen=True)
 
     def _transition(self: Self) -> TurnEnd:
         raise NotImplementedError()
