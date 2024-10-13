@@ -28,8 +28,9 @@ jobs:
       with:
         path: ~/.cache/pip
         # pyproject.toml can affect how a project is built, even tho it isn't being used as such currently 
-        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements*.txt', '**/pyproject.toml') }}
+        key: ${{ runner.os }}-py${{ matrix.python-version }}-pip-${{ hashFiles('**/requirements*.txt', '**/pyproject.toml') }}
         restore-keys: |
+          ${{ runner.os }}-py${{ matrix.python-version }}-pip-
           ${{ runner.os }}-pip-
 
     - name: Install dependencies
