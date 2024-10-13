@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-import copy
 import random
 import traceback  # noqa: F401
 from abc import ABC, abstractmethod
+from copy import replace  # type: ignore
 from dataclasses import dataclass
 from enum import Enum
 from functools import wraps
@@ -34,6 +34,15 @@ class SignalType(Enum):
 
 
 @dataclass
+class PostVelocityRollData:
+    roll_a: int
+    roll_b: int
+    total_velocity_a: int
+    total_velocity_b: int
+    a_is_attacking: bool
+
+
+@dataclass
 class HitRollData:
     base_roll: int
     hit_chance: int
@@ -47,7 +56,7 @@ class DamageData:
     damage: int
 
 
-SignalData = HitRollData | DamageData
+SignalData = PostVelocityRollData | HitRollData | DamageData
 
 
 @dataclass
@@ -55,16 +64,6 @@ class Signal:
     type: SignalType
     # Data is unfortunately both input and output
     data: SignalData | None = None
-
-
-# TODO: move this somehow into BattleState
-def save_before_transition[T: Callable](func: T) -> T:
-    @wraps
-    def wrapper(self, *args, **kwargs):
-        self.save_state()
-        return func(self, *args, **kwargs)
-
-    return wrapper
 
 
 # TODO: Consider where history should be stored (as part of the BattleState,
@@ -108,6 +107,15 @@ class BattleState(ABC, BaseModel):
     def had_someone_died(self) -> bool:
         return self.combatant_a.is_dead() or self.combatant_b.is_dead()
 
+    @staticmethod
+    def save_before_transition(func: Callable) -> Callable:
+        @wraps(func)
+        def wrapper(self, *args, **kwargs):
+            self.save_state()
+            return func(self, *args, **kwargs)
+
+        return wrapper
+
 
 class Start(BattleState):
     def __init__(self, **data):
@@ -134,33 +142,39 @@ class Start(BattleState):
 
 class RoundStart(BattleState):
     def _transition(self) -> VelocityRoll:
-        new_state = copy.replace(self, round_count=self.round_count + 1)
+        new_state = replace(self, round_count=self.round_count + 1)
         new_state.apply_effects(Signal(SignalType.ROUND_START))
         return VelocityRoll(**new_state.model_dump())
 
 
 class VelocityRoll(BattleState):
-    # Included as fields, so that effects can modify them
-    roll_a: int = Field(frozen=False)
-    roll_b: int = Field(frozen=False)
-    total_velocity_a: int = Field(frozen=False)
-    total_velocity_b: int = Field(frozen=False)
-    a_is_attacking: bool = Field(frozen=False)
-
     def _transition(self) -> TurnStart:
         self.apply_effects(Signal(SignalType.PRE_VELOCITY_ROLL))
 
-        self.roll_a = self.rng.randint(1, 1000)
-        self.roll_b = self.rng.randint(1, 1000)
-        self.total_velocity_a = self.combatant_a.velocity + self.roll_a
-        self.total_velocity_b = self.combatant_b.velocity + self.roll_b
-        self.a_is_attacking = self.total_velocity_a >= self.total_velocity_b
+        roll_a = self.rng.randint(1, 1000)
+        roll_b = self.rng.randint(1, 1000)
+        total_velocity_a = self.combatant_a.velocity + roll_a
+        total_velocity_b = self.combatant_b.velocity + roll_b
+        a_is_attacking = total_velocity_a >= total_velocity_b
 
-        self.apply_effects(Signal(SignalType.POST_VELOCITY_ROLL))
+        ctx = PostVelocityRollData(
+            roll_a=roll_a,
+            roll_b=roll_b,
+            total_velocity_a=total_velocity_a,
+            total_velocity_b=total_velocity_b,
+            a_is_attacking=a_is_attacking,
+        )
+        self.apply_effects(Signal(SignalType.POST_VELOCITY_ROLL, ctx))
+
+        roll_a = ctx.roll_a
+        roll_b = ctx.roll_b
+        total_velocity_a = ctx.total_velocity_a
+        total_velocity_b = ctx.total_velocity_b
+        a_is_attacking = ctx.a_is_attacking
 
         return TurnStart(
             **self.model_dump(),
-            a_is_attacking=self.a_is_attacking,
+            a_is_attacking=a_is_attacking,
             has_a_finished_their_turn=False,
             has_b_finished_their_turn=False,
         )
@@ -299,7 +313,7 @@ class TurnEnd(TurnState):
             # This is fine, we don't need to update the state, as RoundEnd does not track who finished their turn
             return RoundEnd(**self.model_dump())
 
-        new_state = copy.replace(self, a_is_attacking=not self.a_is_attacking)
+        new_state = replace(self, a_is_attacking=not self.a_is_attacking)
         return TurnStart(**new_state.model_dump())
 
 
