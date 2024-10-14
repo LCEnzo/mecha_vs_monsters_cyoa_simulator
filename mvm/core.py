@@ -245,7 +245,7 @@ class BattleState(ABC, BaseModel):
     random_seed: int = Field(default_factory=lambda: random.randint(0, 2**32 - 1))
     rng: random.Random = Field(exclude=True, repr=False)
 
-    saved_states: list[BattleState] = Field(default_factory=lambda: [], exclude=True)
+    saved_states: list[BattleState] = Field(default_factory=lambda: [], exclude=True, repr=False)
 
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
 
@@ -266,7 +266,9 @@ class BattleState(ABC, BaseModel):
         return self._transition()
 
     def save_state(self):
-        self.saved_states.append(self.model_copy())
+        archived = self.model_copy(deep=True)
+        object.__setattr__(archived, "saved_states", [])
+        self.saved_states.append(archived)
         # TODO: Save to DB ?
 
     def had_someone_died(self) -> bool:
@@ -330,8 +332,8 @@ class Start(BattleState):
 
 class RoundStart(BattleState):
     def _transition(self) -> VelocityRoll:
-        # https://stackoverflow.com/questions/53756788/how-to-set-the-value-of-dataclass-field-in-post-init-when-frozen-true
         rc = self.round_count
+        # https://stackoverflow.com/questions/53756788/how-to-set-the-value-of-dataclass-field-in-post-init-when-frozen-true
         object.__setattr__(self, "round_count", self.round_count + 1)
         self.apply_effects(Signal(SignalType.ROUND_START))
         assert rc == self.round_count - 1

@@ -233,7 +233,7 @@ class BattleSimulator(BaseModel):
 
     def is_battle_over(self) -> bool:
         # TODO: Consider what to do with current_state == None
-        return self.current_state is None or self.current_state == End
+        return self.current_state is None or isinstance(self.current_state, End)
 
 
 class Battle(BaseModel):

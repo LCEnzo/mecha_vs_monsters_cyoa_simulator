@@ -4,7 +4,7 @@ from mvm.sim_interface import BattleSimulator
 from tests.utils import create_combatant
 
 
-@pytest.mark.timeout(5, method="thread")
+@pytest.mark.timeout(3, method="thread")
 def test_can_do_battle_without_terrain() -> None:
     c = create_combatant(50, 50, 10, 10, 10)
     simulator = BattleSimulator(main_a=c.model_copy(deep=True), main_b=c.model_copy(deep=True))
