@@ -86,7 +86,7 @@ class BattleSimulator(BaseModel):
             f"Shields: {self.current_state.combatant_b.shields}"
         )
 
-    def print_multiple_battle_results(self, total_rounds: int, num_battles: int, results: dict[str, int]):
+    def print_multiple_battle_results(self, total_rounds: int, num_battles: int, results: BattleResults):
         if self.main_a is None or self.main_b is None:
             logger.warning("Please load both combatants before running `print_multiple_battle_results`.")
             if settings.is_debug():

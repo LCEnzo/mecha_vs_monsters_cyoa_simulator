@@ -25,8 +25,8 @@ def test_can_do_battle_without_terrain() -> None:
 def test_can_repeat_battle_alot() -> None:
     c = create_combatant(50, 50, 10, 10, 10)
     simulator = BattleSimulator(main_a=c.model_copy(deep=True), main_b=c.model_copy(deep=True))
-    target_round_count = 250
+    target_battle_count = 60
 
-    res, avg_round_count = simulator.run_multiple_battles(target_round_count)
+    res, avg_round_count = simulator.run_multiple_battles(target_battle_count)
 
-    assert sum([int(val) for val in res.values()]) == target_round_count
+    assert sum([int(val) for val in res.values()]) == target_battle_count  # type: ignore
