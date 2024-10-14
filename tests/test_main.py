@@ -61,7 +61,7 @@ def test_run_config_battles(mock_simulator) -> None:
 
     mock_simulator.load_combatants.assert_called_once()
     mock_simulator.load_terrain.assert_called_once()
-    mock_simulator.start_battle.assert_called_once()
+    mock_simulator.run_battle.assert_called_once()
 
 
 @pytest.mark.parametrize(
@@ -75,7 +75,7 @@ def test_run_config_battles(mock_simulator) -> None:
         (["2", "Desert", "3", "10"], {"load_terrain": 1, "view_combatants_and_terrain": 1}),
         (["5", "A", "armor", "150", "10"], {"modify_combatant": 1}),
         (["6", "10"], {"start_battle": 1}),
-        (["7", "10"], {"simulate_round": 1}),
+        (["7", "10"], {"run_round": 1}),
         (["8", "10"], {"get_battle_result": 1}),
         (["9", "5", "10"], {"run_multiple_battles": 1}),
     ],

@@ -39,10 +39,11 @@ class BattleSimulator(BaseModel):
         )
 
     def run_battle(self) -> None:
-        if self.current_state is None or self.current_state == End:
+        if self.current_state is None or isinstance(self.current_state, End):
             self.start_battle()
-        while self.current_state is not None and self.current_state is not End:
+        while self.current_state is not None and not isinstance(self.current_state, End):
             self.current_state = self.current_state.transition()
+            assert self.current_state.round_count != 200
         logger.info(self.get_battle_result())
 
     def run_round(self) -> None:

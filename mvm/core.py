@@ -546,4 +546,4 @@ class End(BattleState):
         raise Exception("Can't transition from End state")
 
     def _transition(self) -> End:
-        return self
+        raise Exception("Can't transition from End state")
