@@ -56,7 +56,7 @@ jobs:
 
     - name: Check types with mypy
       run: |
-        mypy --show-traceback --check-untyped-defs --enable-incomplete-feature=NewGenericSyntax .
+        mypy --show-traceback --check-untyped-defs .
 
     - name: Lint with ruff
       run: |
