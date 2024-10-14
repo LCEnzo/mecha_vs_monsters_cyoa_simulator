@@ -1,4 +1,14 @@
-from mvm.core import AttackState, AttackType, BattleState, Combatant, DamageData, Effect, Signal, SignalType
+from mvm.core import (
+    AttackState,
+    AttackType,
+    BattleState,
+    Combatant,
+    DamageData,
+    Effect,
+    HitRollData,
+    Signal,
+    SignalType,
+)
 from utils.log_util import logger  # noqa: F401
 from utils.settings import settings  # noqa: F401
 
@@ -28,12 +38,13 @@ shinigami = Combatant(
 
 # Suit
 def suit_extra_condition(effect: Effect, state: BattleState, signal: Signal, effect_from_a: bool) -> bool:
-    return (
-        signal.type == SignalType.POST_HIT_ROLL
-        and signal.data.does_hit
-        and isinstance(state, AttackState)
-        and state.att_type == AttackType.BALLISTIC
-    )
+    if signal.type != SignalType.POST_HIT_ROLL:
+        return False
+
+    assert isinstance(state, AttackState)
+    assert isinstance(signal.data, HitRollData)
+
+    return signal.data.does_hit and state.att_type == AttackType.BALLISTIC
 
 
 def suit_extra_effect(effect: Effect, state: BattleState, signal: Signal, effect_from_a: bool):

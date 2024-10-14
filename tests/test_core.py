@@ -13,10 +13,11 @@ def test_can_do_battle_without_terrain() -> None:
     round_count = simulator.get_round_count()
 
     assert simulator.is_battle_over()
+    assert simulator.current_state is not None
     assert round_count is not None
     assert round_count != 1
-    assert (simulator.combatant_a.armor == 0 and simulator.combatant_a.shields == 0) or (
-        simulator.combatant_b.armor == 0 and simulator.combatant_b.shields == 0
+    assert (simulator.current_state.combatant_a.armor == 0 and simulator.current_state.combatant_a.shields == 0) or (
+        simulator.current_state.combatant_b.armor == 0 and simulator.current_state.combatant_b.shields == 0
     )
 
 
