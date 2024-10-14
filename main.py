@@ -5,7 +5,7 @@ from typing import Generic, TypeVar
 from pydantic import BaseModel
 
 from mvm.combatants import combatants
-from mvm.core import BattleConfig, BattleSimulator, Combatant, Terrain
+from mvm.sim_interface import BattleConfig, BattleSimulator, Combatant, Terrain
 from mvm.terrains import terrains
 from utils.log_util import logger
 from utils.settings import settings  # noqa: F401
@@ -45,13 +45,15 @@ def run_config_battles(battle_config: BattleConfig, simulator: BattleSimulator) 
         simulator.load_terrain(terrain)
 
         logger.info(f"Starting {battle.name}")
-        simulator.start_battle()
+        simulator.run_battle()
         print("")
 
 
 def main() -> None:
-    simulator = BattleSimulator()
     battle_config = BattleConfig.load_battle_config("tomls/battle_config.toml")
+    simulator = BattleSimulator(
+        main_a=battle_config.battles[0].combatant_a, main_b=battle_config.battles[0].combatant_b
+    )
 
     if battle_config.battles:
         run_config_battles(battle_config, simulator)
@@ -89,7 +91,7 @@ def main() -> None:
         elif choice == "6":
             simulator.start_battle()
         elif choice == "7":
-            simulator.simulate_round()
+            simulator.run_round()
         elif choice == "8":
             print(simulator.get_battle_result())
         elif choice == "9":

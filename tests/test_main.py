@@ -3,7 +3,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from main import main, run_config_battles, select_from_list
-from mvm.core import BattleSimulator, Combatant, Terrain
+from mvm.core import Combatant, Terrain
+from mvm.sim_interface import BattleSimulator
 
 # Mock data for testing
 mock_combatants = {

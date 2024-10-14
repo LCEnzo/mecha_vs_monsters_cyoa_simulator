@@ -1,19 +1,21 @@
 from __future__ import annotations
 
 import enum
-import logging
-import traceback
-from pathlib import Path
-from typing import Callable, Literal, Self, TypeVarTuple, Unpack
+import logging  # noqa: F401
+import random
+import traceback  # noqa: F401
+from abc import ABC, abstractmethod
+from copy import replace  # type: ignore
+from dataclasses import dataclass
+from enum import Enum
+from functools import wraps
+from typing import Callable, Literal, Self, TypeIs, TypeVarTuple, Unpack
 
-import tomli
-import tomli_w
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from termcolor import colored
 
-from mvm.battle_state_machine import BattleState, Signal, SignalType, Start
-from utils.log_util import logger
-from utils.settings import settings
+from utils.log_util import logger  # noqa: F401
+from utils.settings import settings  # noqa: F401
 
 
 class AttackType(str, enum.Enum):
@@ -22,19 +24,69 @@ class AttackType(str, enum.Enum):
     BALLISTIC = "Ballistics"
 
 
+class SignalType(Enum):
+    BATTLE_START = "battle_start"
+    ROUND_START = "round_start"
+    PRE_VELOCITY_ROLL = "pre_velocity_roll"
+    POST_VELOCITY_ROLL = "post_velocity_roll"
+    TURN_START = "turn_start"
+    PRE_ATTACK = "pre_attack"
+    POST_HIT_ROLL = "post_hit_roll"
+    POST_DMG_CALC = "post_dmg_calc"
+    POST_DMG_APPLICATION = "post_dmg_application"
+    POST_ATTACK = "post_attack"
+    TURN_END = "turn_end"
+    ROUND_END = "round_end"
+    BATTLE_END = "battle_end"
+
+
+@dataclass
+class PostVelocityRollData:
+    roll_a: int
+    roll_b: int
+    total_velocity_a: int
+    total_velocity_b: int
+    a_is_attacking: bool
+
+
+@dataclass
+class HitRollData:
+    base_roll: int
+    hit_chance: int
+    att_mod: int
+    def_mod: int
+    does_hit: bool
+
+
+@dataclass
+class DamageData:
+    attacker_is_a: bool
+    damage: int
+
+
+SignalData = PostVelocityRollData | HitRollData | DamageData
+
+
+@dataclass
+class Signal:
+    type: SignalType
+    # Data is unfortunately both input and output
+    data: SignalData | None = None
+
+
 Ts = TypeVarTuple("Ts")  # for *args
 
 
-class Effect[StateT: BattleState](BaseModel):
+class Effect(BaseModel):
     name: str
-    trigger_condition: Callable[[Self | Effect, StateT, Signal, bool, Unpack[Ts]], bool]
-    effect_func: Callable[[Self | Effect, StateT, Signal, bool, Unpack[Ts]], None]
+    trigger_condition: Callable[[Self | Effect, BattleState, Signal, bool, Unpack[Ts]], bool]
+    effect_func: Callable[[Self | Effect, BattleState, Signal, bool, Unpack[Ts]], None]
     trigger_count: int = Field(default=0, ge=0)
-    target_state: type[StateT] | None = Field(default=None, frozen=True)
+    target_state: type[BattleState] | None = Field(default=None, frozen=True)
 
     def apply(
         self,
-        curr_state: StateT,
+        curr_state: BattleState,
         signal: Signal,
         effect_from_a: bool,
         *args,
@@ -174,237 +226,290 @@ class Terrain(BaseModel):
             logger.info(f"Executed terrain {colored(self.name, 'yellow')}")
 
 
-class BattleSimulator(BaseModel):
+# TODO: Consider where history should be stored (as part of the BattleState,
+#       as a concern for higher level structs, just dumped into a DB, or w/e)
+class BattleState(ABC, BaseModel):
+    combatant_a: Combatant = Field(exclude=True)
+    combatant_b: Combatant = Field(exclude=True)
+
     main_a: Combatant
-    adds_a: list[Combatant] = Field(default_factory=list)
+    adds_a: list[Combatant]
     main_b: Combatant
-    adds_b: list[Combatant] = Field(default_factory=list)
+    adds_b: list[Combatant]
+
     terrain: Terrain | None = None
-    current_state: BattleState | None = None
 
-    def start_battle(self):
-        if not self.main_a or not self.main_b:
-            logger.warning("Please load both combatants before starting a battle.")
-            if settings.is_debug():
-                raise Exception()
-            return
+    round_count: int = 0
+    random_seed: int = Field(default_factory=lambda: random.randint(0, 2**32 - 1))
+    rng: random.Random = Field(exclude=True)
 
-        logger.info("Battle started.")
-        self.current_state = Start(
-            main_a=self.main_a.model_copy(deep=True),
-            adds_a=[m.model_copy(deep=True) for m in self.adds_a],
-            main_b=self.main_b.model_copy(deep=True),
-            adds_b=[m.model_copy(deep=True) for m in self.adds_b],
-            terrain=self.terrain.model_copy(deep=True) if self.terrain else None,
-        )
-        while self.current_state is not None:
-            self.current_state = self.current_state.transition()
-        logger.info(self.get_battle_result())
+    model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
 
-    def get_battle_result(self) -> str:
-        if self.current_state is None:
-            return "Battle has not started or has ended unexpectedly."
-        if self.current_state.combatant_a.is_dead():
-            return (
-                f"Battle ended. Winner: {colored(self.current_state.combatant_b.name, 'red')} with "
-                f"AR {self.current_state.combatant_b.armor} & SH {self.current_state.combatant_b.shields}"
-            )
-        if self.current_state.combatant_b.is_dead():
-            return (
-                f"Battle ended. Winner: {colored(self.current_state.combatant_a.name, 'green')} with "
-                f"AR {self.current_state.combatant_a.armor} & SH {self.current_state.combatant_a.shields}"
-            )
-        return "Battle is still ongoing."
-
-    def get_battle_status(self) -> str:
-        if self.current_state is None:
-            return "Battle has not started or has ended."
-        return (
-            f"{colored(self.current_state.combatant_a.name, 'green')} - Armor: {self.current_state.combatant_a.armor}, "
-            f"Shields: {self.current_state.combatant_a.shields}\n"
-            f"{colored(self.current_state.combatant_b.name, 'red')} - Armor: {self.current_state.combatant_b.armor}, "
-            f"Shields: {self.current_state.combatant_b.shields}"
-        )
-
-    def print_multiple_battle_results(self, total_rounds: int, num_battles: int, results: dict[str, int]):
-        if self.main_a is None or self.main_b is None:
-            logger.warning("Please load both combatants before running `print_multiple_battle_results`.")
-            if settings.is_debug():
-                raise BaseException("Trying to access a combatant which is not set in BattleSimulator")
-            return None
-
-        avg_rounds = total_rounds / num_battles
-        logger.info(f"Battle simulation results after {num_battles} battles:")
-        logger.info(
-            f"{self.main_a.name} won {results['combatant_a']} times " f"({results['combatant_a']/num_battles*100:.2f}%)"
-        )
-        logger.info(
-            f"{self.main_b.name} won {results['combatant_b']} times " f"({results['combatant_b']/num_battles*100:.2f}%)"
-        )
-        logger.info(f"Average number of rounds per battle: {avg_rounds:.2f}")
-
-    def run_multiple_battles(self, num_battles: int) -> tuple[dict[str, int], float]:
-        results: dict[str, int] = {"combatant_a": 0, "combatant_b": 0}
-        total_rounds = 0
-
-        if not self.main_a or not self.main_b:
-            logger.warning("Please load both combatants before running multiple battles.")
-            if settings.is_debug():
-                raise Exception("Expected to have combatants not be None in run_multiple_battles")
-            return results, 0
-
-        # Store the original log level of the console handler
-        handlers = [
-            handler
-            for handler in logger.handlers
-            if isinstance(handler, logging.StreamHandler) and handler.name == "stdout_stream_log"
-        ]
-        console_handler = handlers[0] if handlers else None
-        original_level = console_handler.level if console_handler else None
-
-        # Temporarily set the console handler to only show WARNING and above
-        # console_handler.setLevel(logging.WARNING)
-
-        try:
-            for _ in range(num_battles):
-                self.start_battle()
-                if self.current_state:
-                    total_rounds += self.current_state.round_count
-                    if self.current_state.combatant_a.is_dead() and not self.current_state.combatant_b.is_dead():
-                        results["combatant_b"] += 1
-                    if not self.current_state.combatant_a.is_dead() and self.current_state.combatant_b.is_dead():
-                        results["combatant_a"] += 1
-
-                print(self.get_battle_result())
-                print("")
-
-            console_handler.setLevel(original_level) if console_handler and original_level else None
-
-            self.print_multiple_battle_results(total_rounds, num_battles, results)
-        except Exception as e:
-            self.print_multiple_battle_results(total_rounds, num_battles, results)
-
-            traceback.print_exc()
-            logger.error(f"Error trying to run multiple battles, ran {num_battles} battles")
-
-            if settings.is_debug():
-                raise e
-        finally:
-            console_handler.setLevel(original_level) if console_handler and original_level else None
-
-        return results, total_rounds / num_battles
-
-    def load_combatants_via_file(self, file_path_a: str, file_path_b: str):
-        try:
-            if not file_path_a:
-                file_path_a = "tomls\\combatant_a.toml"
-            self.combatant_a = load_combatant(file_path_a)
-
-            if not file_path_b:
-                file_path_b = "tomls\\combatant_b.toml"
-            self.combatant_b = load_combatant(file_path_b)
-
-            logger.info(f"Loaded {self.combatant_a.name} as combatant A")
-            logger.info(f"Loaded {self.combatant_b.name} as combatant B")
-        except Exception as e:
-            logger.error(f"Error loading combatants: {e}")
-
-    def load_combatants(self, combatant_a: Combatant, combatant_b: Combatant):
-        self.combatant_a = combatant_a.model_copy(deep=True)
-        self.combatant_b = combatant_b.model_copy(deep=True)
-
-    def load_terrain(self, terrain: Terrain):
-        self.terrain = terrain.model_copy(deep=True)
-
-    def view_combatants_and_terrain(self):
-        if not self.combatant_a or not self.combatant_b:
-            print("Please load both combatants first.")
-            return
-
-        terrain_txt = "No terrain loaded."
+    def apply_effects(self, signal: Signal, *args, **kwargs):
         if self.terrain:
-            # fmt: off
-            terrain_txt = (
-                f"--- Terrain: {self.terrain.name} ---\n"
-                f"{self.terrain.description}"
-            )
-            # fmt: on
+            self.terrain.effect(self.terrain, self, signal, *args, **kwargs)
+        for effect_a in self.combatant_a.effects:
+            effect_a.apply(self, signal, True, *args, **kwargs)
+        for effect_b in self.combatant_b.effects:
+            effect_b.apply(self, signal, False, *args, **kwargs)
 
-        print(
-            f"--- Combatant A: {self.combatant_a.name} ---\n"
-            f"{self._format_combatant_stats(self.combatant_a)}\n\n"
-            f"--- Combatant B: {self.combatant_b.name} ---\n"
-            f"{self._format_combatant_stats(self.combatant_b)}\n\n"
-            f"{terrain_txt}"
-        )
+    @abstractmethod
+    def _transition(self) -> BattleState:
+        pass
 
-    def _format_combatant_stats(self, combatant: Combatant) -> str:
-        return (
-            f"Armor: {combatant.armor}\n"
-            f"Shields: {combatant.shields}\n"
-            f"Ballistics: {combatant.ballistics}\n"
-            f"Chemical: {combatant.chemical}\n"
-            f"Firepower: {combatant.firepower}\n"
-            f"Velocity: {combatant.velocity}\n"
-            f"Effects: {', '.join(effect.name for effect in combatant.effects)}"
-        )
+    def transition(self) -> BattleState:
+        self.save_state()
+        return self._transition()
 
-    def modify_combatant(self, side: str, attribute: str, new_value: int):
-        combatant = self.combatant_a if side.lower() == "a" else self.combatant_b
-        if not combatant:
-            logger.warning(f"Combatant {side.upper()} not loaded.")
-            return
+    def save_state(self):
+        raise NotImplementedError()
 
-        if attribute not in ["armor", "shields", "ballistics", "chemical", "firepower", "velocity"]:
-            logger.warning("Invalid attribute.")
-
-        setattr(combatant, attribute, new_value)
-        logger.info(f"Updated {attribute} to {new_value} for {combatant.name}")
-
-    def load_terrain_via_file(self, file_path: str):
-        try:
-            self.terrain = load_terrain(file_path)
-            logger.info(f"Loaded terrain: {self.terrain.name}")
-        except Exception as e:
-            logger.error(f"Error loading terrain: {e}")
-
-
-class Battle(BaseModel):
-    name: str
-    terrain: str
-    combatant_a: str
-    combatant_b: str
-
-
-class BattleConfig(BaseModel):
-    battles: list[Battle]
+    def had_someone_died(self) -> bool:
+        return self.combatant_a.is_dead() or self.combatant_b.is_dead()
 
     @staticmethod
-    def load_battle_config(file_path: str = "tomls\\battle_config.toml") -> BattleConfig:
-        with open(file_path, "rb") as f:
-            data = tomli.load(f)
-        cc = BattleConfig.model_validate(data)
-        return cc
+    def save_before_transition(func: Callable) -> Callable:
+        @wraps(func)
+        def wrapper(self, *args, **kwargs):
+            self.save_state()
+            return func(self, *args, **kwargs)
+
+        return wrapper
 
 
-def load_combatant(file_path: str | Path) -> Combatant:
-    with open(file_path, "rb") as f:
-        data = tomli.load(f)
-    c = Combatant.parse_obj(data)
-    return c
+class Start(BattleState):
+    def __init__(self, **data):
+        super().__init__(**data)
+
+        # https://stackoverflow.com/questions/53756788/how-to-set-the-value-of-dataclass-field-in-post-init-when-frozen-true
+        object.__setattr__(self, "rng", random.Random(self.random_seed))
+
+        combatant_a = self.main_a.model_copy(deep=True)
+        for ca in self.adds_a:
+            combatant_a.merge_inplace(ca)
+
+        combatant_b = self.main_b.model_copy(deep=True)
+        for cb in self.adds_b:
+            combatant_b.merge_inplace(cb)
+
+        object.__setattr__(self, "combatant_a", combatant_a)
+        object.__setattr__(self, "combatant_b", combatant_b)
+
+    def _transition(self) -> RoundStart:
+        self.apply_effects(Signal(SignalType.BATTLE_START))
+        return RoundStart(**self.model_dump())
 
 
-def save_combatant(combatant: Combatant, file_path: str | Path) -> None:
-    with open(file_path, "wb") as f:
-        tomli_w.dump(combatant.dict(), f)
+class RoundStart(BattleState):
+    def _transition(self) -> VelocityRoll:
+        new_state = replace(self, round_count=self.round_count + 1)
+        new_state.apply_effects(Signal(SignalType.ROUND_START))
+        return VelocityRoll(**new_state.model_dump())
 
 
-def load_terrain(file_path: str | Path) -> Terrain:
-    with open(file_path, "rb") as f:
-        data = tomli.load(f)
-    return Terrain.parse_obj(data)
+class VelocityRoll(BattleState):
+    def _transition(self) -> TurnStart:
+        self.apply_effects(Signal(SignalType.PRE_VELOCITY_ROLL))
+
+        roll_a = self.rng.randint(1, 1000)
+        roll_b = self.rng.randint(1, 1000)
+        total_velocity_a = self.combatant_a.velocity + roll_a
+        total_velocity_b = self.combatant_b.velocity + roll_b
+        a_is_attacking = total_velocity_a >= total_velocity_b
+
+        ctx = PostVelocityRollData(
+            roll_a=roll_a,
+            roll_b=roll_b,
+            total_velocity_a=total_velocity_a,
+            total_velocity_b=total_velocity_b,
+            a_is_attacking=a_is_attacking,
+        )
+        self.apply_effects(Signal(SignalType.POST_VELOCITY_ROLL, ctx))
+
+        roll_a = ctx.roll_a
+        roll_b = ctx.roll_b
+        total_velocity_a = ctx.total_velocity_a
+        total_velocity_b = ctx.total_velocity_b
+        a_is_attacking = ctx.a_is_attacking
+
+        logger.info(
+            f"Round {self.round_count}: {colored(self.combatant_a.name, 'green')} has total velocity "
+            f"{total_velocity_a}, AR: {self.combatant_a.armor} SH: {self.combatant_a.shields} vs "
+            f"{colored(self.combatant_b.name, 'red')} has {total_velocity_b}, "
+            f"AR: {self.combatant_b.armor} SH: {self.combatant_b.shields} "
+            f"on Terrain {colored(self.terrain.name, 'yellow')}"
+            if self.terrain
+            else "without Terrain"
+        )
+
+        return TurnStart(
+            **self.model_dump(),
+            a_is_attacking=a_is_attacking,
+            has_a_finished_their_turn=False,
+            has_b_finished_their_turn=False,
+        )
 
 
-def save_terrain(terrain: Terrain, file_path: str | Path) -> None:
-    with open(file_path, "wb") as f:
-        tomli_w.dump(terrain.dict(), f)
+class TurnState(BattleState, ABC):
+    a_is_attacking: bool
+    has_a_finished_their_turn: bool
+    has_b_finished_their_turn: bool
+
+
+class AttackState(TurnState, ABC):
+    att_type: AttackType
+
+    def process_attack(self) -> None:
+        att_type = self.att_type
+
+        if settings.is_debug():
+            assert att_type is not None
+
+        if not self.is_att_type(att_type):
+            logger.warning(
+                f"Trying to calculate_hit with state ({type(self)}) and att_type ({att_type}). Whole state: {self}"
+            )
+            return None
+
+        self.apply_effects(Signal(SignalType.PRE_ATTACK))
+
+        attacker = self.combatant_a if self.a_is_attacking else self.combatant_b
+        defender = self.combatant_b if self.a_is_attacking else self.combatant_a
+
+        does_hit: bool = self.calculate_hit(attacker, defender)
+        if does_hit:
+            damage = self.get_damage(attacker, defender)
+            self.apply_effects(Signal(SignalType.POST_DMG_CALC, DamageData(self.a_is_attacking, damage)))
+            damage = DamageData.damage
+
+            applied_damage = defender.apply_damage(damage, att_type)
+            self.apply_effects(Signal(SignalType.POST_DMG_APPLICATION, DamageData(self.a_is_attacking, applied_damage)))
+            logger.info(f"{attacker.name} hits {defender.name} with {att_type.value} for {applied_damage} damage")
+        else:
+            logger.info(f"{attacker.name} misses {defender.name} with {att_type.value}")
+
+    def calculate_hit(self, attacker: Combatant, defender: Combatant) -> bool:
+        """Calculate whether an attack hits, taking into account modifiers."""
+        att_type = self.att_type
+
+        if settings.is_debug():
+            assert att_type is not None
+
+        if not self.is_att_type(att_type):
+            logger.warning(
+                f"Trying to calculate_hit with state ({type(self)}) and att_type ({att_type})." f" Whole state: {self}"
+            )
+            return False
+
+        base_hit = self.rng.randint(0, 1000)
+        # TODO ????
+        # attacker.on_hit_roll(base_hit, self.att_type)
+        hit_chance = (attacker.velocity - defender.velocity) // 2
+
+        att_mod = attacker.modifiers.get("attack_hit_chance_mod", {}).get(att_type.value, 0)
+        def_mod = defender.modifiers.get("defense_hit_chance_mod", {}).get(att_type.value, 0)
+
+        does_hit = base_hit + att_mod - def_mod >= 500 - hit_chance
+        ctx = HitRollData(
+            base_roll=base_hit, hit_chance=hit_chance, att_mod=att_mod, def_mod=def_mod, does_hit=does_hit
+        )
+        self.apply_effects(Signal(SignalType.POST_HIT_ROLL, data=ctx))
+        # TODO: This needs fixing, it's a mess
+        does_hit = base_hit + att_mod - def_mod >= 500 - hit_chance
+        does_hit = ctx.does_hit
+
+        logger.debug(
+            f"Attack ({attacker.name}) calc hit: {(base_hit, hit_chance, att_mod, def_mod) = } -> {does_hit = }"
+        )
+        self.apply_effects(Signal(SignalType.POST_ATTACK))
+
+        return does_hit
+
+    def get_damage(self, attacker: Combatant, defender: Combatant) -> int:
+        return attacker.get_damage(self.att_type)
+
+    def is_att_type(self, val: object) -> TypeIs[AttackType]:
+        return isinstance(val, AttackType)
+
+
+class TurnStart(TurnState):
+    def _transition(self) -> FirepowerAttack:
+        self.apply_effects(Signal(SignalType.TURN_START))
+        return FirepowerAttack(**self.model_dump())
+
+
+class FirepowerAttack(AttackState):
+    att_type: AttackType = Field(default=AttackType.FIREPOWER, frozen=True)
+
+    def _transition(self) -> BallisticsAttack | TurnEnd:
+        self.process_attack()
+        if self.had_someone_died():
+            return TurnEnd(**self.model_dump())
+        return BallisticsAttack(**self.model_dump())
+
+
+class BallisticsAttack(AttackState):
+    att_type: AttackType = Field(default=AttackType.BALLISTIC, frozen=True)
+
+    def _transition(self) -> ChemicalAttack | TurnEnd:
+        self.process_attack()
+        if self.had_someone_died():
+            return TurnEnd(**self.model_dump())
+        return ChemicalAttack(**self.model_dump())
+
+
+class ChemicalAttack(AttackState):
+    att_type: AttackType = Field(default=AttackType.CHEMICAL, frozen=True)
+
+    def _transition(self) -> TurnEnd:
+        self.process_attack()
+        return TurnEnd(**self.model_dump())
+
+
+class TurnEnd(TurnState):
+    def _transition(self) -> RoundEnd | TurnStart:
+        a_finished = self.has_a_finished_their_turn
+        b_finished = self.has_b_finished_their_turn
+
+        if self.a_is_attacking:
+            a_finished = True
+        else:
+            b_finished = True
+
+        self.apply_effects(Signal(SignalType.TURN_END))
+
+        if self.had_someone_died():
+            # This is fine, we don't need to update the state, as RoundEnd does not track who finished their turn
+            return RoundEnd(**self.model_dump())
+
+        if a_finished and b_finished:
+            # This is fine, we don't need to update the state, as RoundEnd does not track who finished their turn
+            return RoundEnd(**self.model_dump())
+
+        new_state = replace(self, a_is_attacking=not self.a_is_attacking)
+        return TurnStart(**new_state.model_dump())
+
+
+class RoundEnd(BattleState):
+    def _transition(self) -> End | RoundStart:
+        self.apply_effects(Signal(SignalType.ROUND_END))
+
+        if self.had_someone_died():
+            self.apply_effects(Signal(SignalType.BATTLE_END))
+            return End(**self.model_dump())
+
+        return RoundStart(**self.model_dump())
+
+
+class End(BattleState):
+    def __post_init__(self):
+        ret = None
+        # ret = super().__post_init__()
+        self.save_state()
+        return ret
+
+    def transition(self) -> End:
+        raise Exception("Can't transition from End state")
+
+    def _transition(self) -> End:
+        return self
