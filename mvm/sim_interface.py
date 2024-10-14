@@ -15,9 +15,9 @@ from utils.settings import settings
 
 
 class BattleSimulator(BaseModel):
-    main_a: Combatant | None
+    main_a: Combatant | None = None
     adds_a: list[Combatant] = Field(default_factory=list)
-    main_b: Combatant | None
+    main_b: Combatant | None = None
     adds_b: list[Combatant] = Field(default_factory=list)
     terrain: Terrain | None = None
     current_state: BattleState | None = None
