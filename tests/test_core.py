@@ -33,6 +33,7 @@ def test_can_repeat_battle_alot() -> None:
     assert sum([int(val) for val in res.values()]) == target_battle_count  # type: ignore
 
 
+@pytest.mark.timeout(2, method="thread")
 def test_velocity_roll():
     """Tests velocity roll and turn order"""
     fast = create_combatant(100, 50, 20, 20, 20, 1000, name="Fast")
