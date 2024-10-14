@@ -85,7 +85,7 @@ def main() -> None:
             side = input("Which combatant to modify? (A/B): ")
             attribute = input("Enter attribute to modify: ")
             new_value = int(input(f"Enter new value for {attribute}: "))
-            print(simulator.modify_combatant(side, attribute, new_value))
+            simulator.modify_combatant(side, attribute, new_value)
         elif choice == "6":
             simulator.start_battle()
         elif choice == "7":

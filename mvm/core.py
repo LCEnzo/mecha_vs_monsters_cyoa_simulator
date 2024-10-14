@@ -6,7 +6,6 @@ import random
 import time
 import traceback  # noqa: F401
 from abc import ABC, abstractmethod
-from copy import replace  # type: ignore
 from dataclasses import dataclass
 from enum import Enum
 from functools import wraps
@@ -514,8 +513,8 @@ class TurnEnd(TurnState):
             # This is fine, we don't need to update the state, as RoundEnd does not track who finished their turn
             return RoundEnd(**self.dump_for_transition())
 
-        new_state = replace(self, a_is_attacking=not self.a_is_attacking)
-        return TurnStart(**new_state.dump_for_transition())
+        object.__setattr__(self, "a_is_attacking", not self.a_is_attacking)
+        return TurnStart(**self.dump_for_transition())
 
 
 class RoundEnd(BattleState):
