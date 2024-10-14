@@ -410,17 +410,21 @@ class AttackState(TurnState, ABC):
             damage = self.get_damage(attacker, defender)
             pre_damage_armor = defender.armor
             pre_damage_shields = defender.shields
-            self.apply_effects(Signal(
-                SignalType.POST_DMG_CALC, 
-                DamageData(self.a_is_attacking, pre_damage_armor, pre_damage_shields, damage)
-            ))
+            self.apply_effects(
+                Signal(
+                    SignalType.POST_DMG_CALC,
+                    DamageData(self.a_is_attacking, pre_damage_armor, pre_damage_shields, damage),
+                )
+            )
             damage = DamageData.damage
 
             applied_damage = defender.apply_damage(damage, att_type)
-            self.apply_effects(Signal(
-                SignalType.POST_DMG_APPLICATION, 
-                DamageData(self.a_is_attacking, pre_damage_armor, pre_damage_shields, damage)
-            ))
+            self.apply_effects(
+                Signal(
+                    SignalType.POST_DMG_APPLICATION,
+                    DamageData(self.a_is_attacking, pre_damage_armor, pre_damage_shields, damage),
+                )
+            )
             logger.info(f"{attacker.name} hits {defender.name} with {att_type.value} for {applied_damage} damage")
         else:
             logger.info(f"{attacker.name} misses {defender.name} with {att_type.value}")

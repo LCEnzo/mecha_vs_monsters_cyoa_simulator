@@ -15,18 +15,6 @@ class Settings(BaseSettings):
 
     model_config = SettingsConfigDict(env_file=".env")
 
-    _instance: Settings | None = None
-
-    def __new__(cls, *args, **kwargs):
-        if cls._instance is None:
-            cls._instance = super().__new__(cls, *args, **kwargs)
-        return cls._instance
-
-    @classmethod
-    def reset(cls) -> None:
-        """Reset the singleton instance to allow reloading environment variables."""
-        cls._instance = None
-
     def is_debug(self) -> bool:
         return self.mode == Modes.DEBUG
 

@@ -7,5 +7,4 @@ import utils.settings as settings_mod
 def set_debug_mode(monkeypatch):
     monkeypatch.setenv("MODE", "DEBUG")
 
-    settings_mod.Settings.reset()
     settings_mod.settings = settings_mod.Settings()

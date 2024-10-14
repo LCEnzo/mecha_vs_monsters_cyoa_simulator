@@ -88,7 +88,7 @@ def flare_knives_effect(effect: Effect, state: BattleState, signal: Signal, effe
 def tandem_demo_condition(effect: Effect, state: BattleState, signal: Signal, effect_from_a: bool) -> bool:
     if signal.type != SignalType.POST_DMG_APPLICATION:
         return False
-    
+
     assert isinstance(signal.data, DamageData)
 
     other = state.combatant_b if effect_from_a else state.combatant_a
