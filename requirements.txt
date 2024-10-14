@@ -2,11 +2,11 @@ tomli~=2.0.2
 tomli_w~=1.1.0
 termcolor~=2.5.0
 pydantic~=2.9.2
-pytest~=8.3.3
 pydantic-settings~=2.5.2
+pytest~=8.3.3
 coverage~=7.6.3
-# coverage-badge~=1.1.2
 pytest-cov~=5.0.0
+
 # The next version (0.9.3) I tried had broken support for asctime in the formatter
 # IDK about 0.9.2
 # OK, new comment here, picologging 0.9.1 and 0.9.2 are causing segfaults when exiting the program. Ugh.
