@@ -250,7 +250,7 @@ class BattleState(ABC, BaseModel):
 
     def apply_effects(self, signal: Signal, *args, **kwargs):
         if self.terrain:
-            self.terrain.effect(self.terrain, self, signal, *args, **kwargs)
+            self.terrain.apply_effect(self, signal, *args, **kwargs)
         for effect_a in self.combatant_a.effects:
             effect_a.apply(self, signal, True, *args, **kwargs)
         for effect_b in self.combatant_b.effects:
