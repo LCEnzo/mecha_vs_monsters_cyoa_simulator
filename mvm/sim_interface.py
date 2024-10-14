@@ -15,9 +15,9 @@ from utils.settings import settings
 
 
 class BattleSimulator(BaseModel):
-    main_a: Combatant
+    main_a: Combatant | None
     adds_a: list[Combatant] = Field(default_factory=list)
-    main_b: Combatant
+    main_b: Combatant | None
     adds_b: list[Combatant] = Field(default_factory=list)
     terrain: Terrain | None = None
     current_state: BattleState | None = None
@@ -30,7 +30,7 @@ class BattleSimulator(BaseModel):
             return
 
         logger.info("Battle started.")
-        self.current_state = Start(
+        self.current_state = Start.initialize(
             main_a=self.main_a.model_copy(deep=True),
             adds_a=[m.model_copy(deep=True) for m in self.adds_a],
             main_b=self.main_b.model_copy(deep=True),
@@ -120,7 +120,7 @@ class BattleSimulator(BaseModel):
 
         try:
             for _ in range(num_battles):
-                self.run_battle()()
+                self.run_battle()
                 if self.current_state:
                     total_rounds += self.current_state.round_count
                     if self.current_state.combatant_a.is_dead() and not self.current_state.combatant_b.is_dead():

@@ -3,6 +3,7 @@ from __future__ import annotations
 import enum
 import logging  # noqa: F401
 import random
+import time
 import traceback  # noqa: F401
 from abc import ABC, abstractmethod
 from copy import replace  # type: ignore
@@ -262,7 +263,9 @@ class BattleState(ABC, BaseModel):
         return self._transition()
 
     def save_state(self):
-        raise NotImplementedError()
+        # TODO: TODO
+        pass
+        # raise NotImplementedError()
 
     def had_someone_died(self) -> bool:
         return self.combatant_a.is_dead() or self.combatant_b.is_dead()
@@ -278,22 +281,37 @@ class BattleState(ABC, BaseModel):
 
 
 class Start(BattleState):
-    def __init__(self, **data):
-        super().__init__(**data)
+    @classmethod
+    def initialize(
+        cls,
+        main_a: Combatant,
+        main_b: Combatant,
+        adds_a: list[Combatant],
+        adds_b: list[Combatant],
+        terrain: Terrain | None = None,
+        random_seed: int = int(time.time()),
+    ) -> Start:
+        rng = random.Random(random_seed)
 
-        # https://stackoverflow.com/questions/53756788/how-to-set-the-value-of-dataclass-field-in-post-init-when-frozen-true
-        object.__setattr__(self, "rng", random.Random(self.random_seed))
-
-        combatant_a = self.main_a.model_copy(deep=True)
-        for ca in self.adds_a:
+        combatant_a = main_a.model_copy(deep=True)
+        for ca in adds_a:
             combatant_a.merge_inplace(ca)
 
-        combatant_b = self.main_b.model_copy(deep=True)
-        for cb in self.adds_b:
+        combatant_b = main_b.model_copy(deep=True)
+        for cb in adds_b:
             combatant_b.merge_inplace(cb)
 
-        object.__setattr__(self, "combatant_a", combatant_a)
-        object.__setattr__(self, "combatant_b", combatant_b)
+        return cls(
+            combatant_a=combatant_a,
+            main_a=main_a,
+            adds_a=adds_a,
+            combatant_b=combatant_b,
+            main_b=main_b,
+            adds_b=adds_b,
+            terrain=terrain,
+            random_seed=random_seed,
+            rng=rng,
+        )
 
     def _transition(self) -> RoundStart:
         self.apply_effects(Signal(SignalType.BATTLE_START))
