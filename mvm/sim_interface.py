@@ -38,14 +38,14 @@ class BattleSimulator(BaseModel):
             terrain=self.terrain.model_copy(deep=True) if self.terrain else None,
         )
 
-    def run_battle(self):
+    def run_battle(self) -> None:
         if self.current_state is None or self.current_state == End:
             self.start_battle()
         while self.current_state is not None and self.current_state is not End:
             self.current_state = self.current_state.transition()
         logger.info(self.get_battle_result())
 
-    def run_round(self):
+    def run_round(self) -> None:
         if self.current_state is None or self.current_state == End:
             self.start_battle()
         while self.current_state is not None and self.current_state is not RoundEnd:
@@ -147,30 +147,30 @@ class BattleSimulator(BaseModel):
 
         return results, total_rounds / num_battles
 
-    def load_combatants_via_file(self, file_path_a: str, file_path_b: str):
+    def load_combatants_via_file(self, file_path_a: str, file_path_b: str) -> None:
         try:
             if not file_path_a:
                 file_path_a = "tomls\\combatant_a.toml"
-            self.combatant_a = load_combatant(file_path_a)
+            self.main_a = load_combatant(file_path_a)
 
             if not file_path_b:
                 file_path_b = "tomls\\combatant_b.toml"
-            self.combatant_b = load_combatant(file_path_b)
+            self.main_b = load_combatant(file_path_b)
 
-            logger.info(f"Loaded {self.combatant_a.name} as combatant A")
-            logger.info(f"Loaded {self.combatant_b.name} as combatant B")
+            logger.info(f"Loaded {self.main_a.name} as combatant A")
+            logger.info(f"Loaded {self.main_b.name} as combatant B")
         except Exception as e:
             logger.error(f"Error loading combatants: {e}")
 
-    def load_combatants(self, combatant_a: Combatant, combatant_b: Combatant):
-        self.combatant_a = combatant_a.model_copy(deep=True)
-        self.combatant_b = combatant_b.model_copy(deep=True)
+    def load_combatants(self, main_a: Combatant, main_b: Combatant) -> None:
+        self.main_a = main_a.model_copy(deep=True)
+        self.main_b = main_b.model_copy(deep=True)
 
-    def load_terrain(self, terrain: Terrain):
+    def load_terrain(self, terrain: Terrain) -> None:
         self.terrain = terrain.model_copy(deep=True)
 
-    def view_combatants_and_terrain(self):
-        if not self.combatant_a or not self.combatant_b:
+    def view_combatants_and_terrain(self) -> None:
+        if not self.main_a or not self.main_b:
             print("Please load both combatants first.")
             return
 
@@ -184,10 +184,10 @@ class BattleSimulator(BaseModel):
             # fmt: on
 
         print(
-            f"--- Combatant A: {self.combatant_a.name} ---\n"
-            f"{self._format_combatant_stats(self.combatant_a)}\n\n"
-            f"--- Combatant B: {self.combatant_b.name} ---\n"
-            f"{self._format_combatant_stats(self.combatant_b)}\n\n"
+            f"--- Combatant A: {self.main_a.name} ---\n"
+            f"{self._format_combatant_stats(self.main_a)}\n\n"
+            f"--- Combatant B: {self.main_b.name} ---\n"
+            f"{self._format_combatant_stats(self.main_b)}\n\n"
             f"{terrain_txt}"
         )
 
@@ -202,8 +202,8 @@ class BattleSimulator(BaseModel):
             f"Effects: {', '.join(effect.name for effect in combatant.effects)}"
         )
 
-    def modify_combatant(self, side: str, attribute: str, new_value: int):
-        combatant = self.combatant_a if side.lower() == "a" else self.combatant_b
+    def modify_combatant(self, side: str, attribute: str, new_value: int) -> None:
+        combatant = self.main_a if side.lower() == "a" else self.main_b
         if not combatant:
             logger.warning(f"Combatant {side.upper()} not loaded.")
             return
