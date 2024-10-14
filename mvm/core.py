@@ -331,8 +331,10 @@ class Start(BattleState):
 class RoundStart(BattleState):
     def _transition(self) -> VelocityRoll:
         # https://stackoverflow.com/questions/53756788/how-to-set-the-value-of-dataclass-field-in-post-init-when-frozen-true
+        rc = self.round_count
         object.__setattr__(self, "round_count", self.round_count + 1)
         self.apply_effects(Signal(SignalType.ROUND_START))
+        assert rc == self.round_count - 1
         return VelocityRoll(**self.dump_for_transition())
 
 
@@ -507,8 +509,10 @@ class TurnEnd(TurnState):
 
         if self.a_is_attacking:
             a_finished = True
+            object.__setattr__(self, "has_a_finished_their_turn", a_finished)
         else:
             b_finished = True
+            object.__setattr__(self, "has_b_finished_their_turn", b_finished)
 
         self.apply_effects(Signal(SignalType.TURN_END))
 
