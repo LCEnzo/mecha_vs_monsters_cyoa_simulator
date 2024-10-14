@@ -52,12 +52,14 @@ class BattleSimulator(BaseModel):
             assert self.current_state.round_count != 200
         logger.info(self.get_battle_result())
 
-    def run_round(self) -> None:
+    def run_round(self, until: type[BattleState] = RoundEnd) -> None:
+        assert until is not BattleState
+
         if self.current_state is None or self.current_state == End:
             self.start_battle()
-        while self.current_state is not None and self.current_state is not RoundEnd:
+        while self.current_state is not None and not isinstance(self.current_state, (until, RoundEnd)):
             self.current_state = self.current_state.transition()
-        if self.current_state is not None and self.current_state is RoundEnd:
+        if self.current_state is not None and isinstance(self.current_state, (until, RoundEnd)):
             self.current_state.transition()
         logger.info(self.get_battle_result())
 
