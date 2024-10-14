@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import traceback
 from pathlib import Path
+from typing import TypedDict
 
 import tomli
 import tomli_w
@@ -12,6 +13,11 @@ from termcolor import colored
 from mvm.core import BattleState, Combatant, End, RoundEnd, Start, Terrain
 from utils.log_util import logger
 from utils.settings import settings
+
+
+class BattleResults(TypedDict):
+    combatant_a: int
+    combatant_b: int
 
 
 class BattleSimulator(BaseModel):
@@ -97,8 +103,8 @@ class BattleSimulator(BaseModel):
         )
         logger.info(f"Average number of rounds per battle: {avg_rounds:.2f}")
 
-    def run_multiple_battles(self, num_battles: int) -> tuple[dict[str, int], float]:
-        results: dict[str, int] = {"combatant_a": 0, "combatant_b": 0}
+    def run_multiple_battles(self, num_battles: int) -> tuple[BattleResults, float]:
+        results: BattleResults = {"combatant_a": 0, "combatant_b": 0}
         total_rounds = 0
 
         if not self.main_a or not self.main_b:
