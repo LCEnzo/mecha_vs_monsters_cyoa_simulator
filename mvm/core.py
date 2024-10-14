@@ -10,7 +10,7 @@ from copy import replace  # type: ignore
 from dataclasses import dataclass
 from enum import Enum
 from functools import wraps
-from typing import Callable, Literal, Self, TypeIs, TypeVarTuple, Unpack
+from typing import Any, Callable, Literal, Self, TypeIs, TypeVarTuple, Unpack
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from termcolor import colored
@@ -230,8 +230,8 @@ class Terrain(BaseModel):
 # TODO: Consider where history should be stored (as part of the BattleState,
 #       as a concern for higher level structs, just dumped into a DB, or w/e)
 class BattleState(ABC, BaseModel):
-    combatant_a: Combatant = Field(exclude=True)
-    combatant_b: Combatant = Field(exclude=True)
+    combatant_a: Combatant = Field(repr=False)
+    combatant_b: Combatant = Field(repr=False)
 
     main_a: Combatant
     adds_a: list[Combatant]
@@ -242,7 +242,9 @@ class BattleState(ABC, BaseModel):
 
     round_count: int = 0
     random_seed: int = Field(default_factory=lambda: random.randint(0, 2**32 - 1))
-    rng: random.Random = Field(exclude=True)
+    rng: random.Random = Field(exclude=True, repr=False)
+
+    saved_states: list[BattleState] = Field(default_factory=lambda: [], exclude=True)
 
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
 
@@ -263,12 +265,19 @@ class BattleState(ABC, BaseModel):
         return self._transition()
 
     def save_state(self):
-        # TODO: TODO
-        pass
-        # raise NotImplementedError()
+        self.saved_states.append(self.model_copy())
+        # TODO: Save to DB ?
 
     def had_someone_died(self) -> bool:
         return self.combatant_a.is_dead() or self.combatant_b.is_dead()
+
+    def dump_for_transition(self) -> dict[str, Any]:
+        d = self.model_dump()
+        d["combatant_a"] = self.combatant_a
+        d["combatant_b"] = self.combatant_b
+        d["rng"] = self.rng
+        d["saved_states"] = self.saved_states
+        return d
 
     @staticmethod
     def save_before_transition(func: Callable) -> Callable:
@@ -315,14 +324,15 @@ class Start(BattleState):
 
     def _transition(self) -> RoundStart:
         self.apply_effects(Signal(SignalType.BATTLE_START))
-        return RoundStart(**self.model_dump())
+        return RoundStart(**self.dump_for_transition())
 
 
 class RoundStart(BattleState):
     def _transition(self) -> VelocityRoll:
-        new_state = replace(self, round_count=self.round_count + 1)
-        new_state.apply_effects(Signal(SignalType.ROUND_START))
-        return VelocityRoll(**new_state.model_dump())
+        # https://stackoverflow.com/questions/53756788/how-to-set-the-value-of-dataclass-field-in-post-init-when-frozen-true
+        object.__setattr__(self, "round_count", self.round_count + 1)
+        self.apply_effects(Signal(SignalType.ROUND_START))
+        return VelocityRoll(**self.dump_for_transition())
 
 
 class VelocityRoll(BattleState):
@@ -361,7 +371,7 @@ class VelocityRoll(BattleState):
         )
 
         return TurnStart(
-            **self.model_dump(),
+            **self.dump_for_transition(),
             a_is_attacking=a_is_attacking,
             has_a_finished_their_turn=False,
             has_b_finished_their_turn=False,
@@ -453,7 +463,7 @@ class AttackState(TurnState, ABC):
 class TurnStart(TurnState):
     def _transition(self) -> FirepowerAttack:
         self.apply_effects(Signal(SignalType.TURN_START))
-        return FirepowerAttack(**self.model_dump())
+        return FirepowerAttack(**self.dump_for_transition())
 
 
 class FirepowerAttack(AttackState):
@@ -462,8 +472,8 @@ class FirepowerAttack(AttackState):
     def _transition(self) -> BallisticsAttack | TurnEnd:
         self.process_attack()
         if self.had_someone_died():
-            return TurnEnd(**self.model_dump())
-        return BallisticsAttack(**self.model_dump())
+            return TurnEnd(**self.dump_for_transition())
+        return BallisticsAttack(**self.dump_for_transition())
 
 
 class BallisticsAttack(AttackState):
@@ -472,8 +482,8 @@ class BallisticsAttack(AttackState):
     def _transition(self) -> ChemicalAttack | TurnEnd:
         self.process_attack()
         if self.had_someone_died():
-            return TurnEnd(**self.model_dump())
-        return ChemicalAttack(**self.model_dump())
+            return TurnEnd(**self.dump_for_transition())
+        return ChemicalAttack(**self.dump_for_transition())
 
 
 class ChemicalAttack(AttackState):
@@ -481,7 +491,7 @@ class ChemicalAttack(AttackState):
 
     def _transition(self) -> TurnEnd:
         self.process_attack()
-        return TurnEnd(**self.model_dump())
+        return TurnEnd(**self.dump_for_transition())
 
 
 class TurnEnd(TurnState):
@@ -498,14 +508,14 @@ class TurnEnd(TurnState):
 
         if self.had_someone_died():
             # This is fine, we don't need to update the state, as RoundEnd does not track who finished their turn
-            return RoundEnd(**self.model_dump())
+            return RoundEnd(**self.dump_for_transition())
 
         if a_finished and b_finished:
             # This is fine, we don't need to update the state, as RoundEnd does not track who finished their turn
-            return RoundEnd(**self.model_dump())
+            return RoundEnd(**self.dump_for_transition())
 
         new_state = replace(self, a_is_attacking=not self.a_is_attacking)
-        return TurnStart(**new_state.model_dump())
+        return TurnStart(**new_state.dump_for_transition())
 
 
 class RoundEnd(BattleState):
@@ -514,9 +524,9 @@ class RoundEnd(BattleState):
 
         if self.had_someone_died():
             self.apply_effects(Signal(SignalType.BATTLE_END))
-            return End(**self.model_dump())
+            return End(**self.dump_for_transition())
 
-        return RoundStart(**self.model_dump())
+        return RoundStart(**self.dump_for_transition())
 
 
 class End(BattleState):
