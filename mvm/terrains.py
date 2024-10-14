@@ -140,8 +140,7 @@ malvinas = Terrain(
 
 # Ruthenian Grasses
 def ruthenian_grasses_effect(self: Terrain, state: BattleState, signal: Signal):
-    assert signal.type == SignalType.POST_HIT_ROLL
-    assert isinstance(signal.data, HitRollData)
+    assert signal.type == SignalType.BATTLE_START
 
     for att_type in list(AttackType):
         a_mod = state.combatant_a.modifiers.get("attack_hit_chance_mod", {}).get(att_type, 0) - 20
@@ -196,7 +195,7 @@ badaxsan = Terrain(
 terrains: dict[str, Terrain] = {
     "Hela": hela,
     "Lake Tampua": lake_tampua,
-    # "Malvinas": malvinas,
+    "Malvinas": malvinas,
     # "Okavango": okavango,
     "Ruthenian Grasses": ruthenian_grasses,
     "Badaxsan": badaxsan,
