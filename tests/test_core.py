@@ -89,5 +89,6 @@ def test_terrain_effects():
     simulator.start_battle()
     simulator.run_round()
 
+    assert simulator.current_state is not None
     assert simulator.current_state.combatant_a.velocity == 5
     assert simulator.current_state.combatant_b.velocity == 5
