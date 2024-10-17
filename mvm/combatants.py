@@ -1,15 +1,26 @@
-from mvm.core import AttackType, Combatant, Effect
+from mvm.core import (
+    AttackState,
+    AttackType,
+    BattleState,
+    Combatant,
+    DamageData,
+    Effect,
+    HitRollData,
+    Signal,
+    SignalType,
+)
 from utils.log_util import logger  # noqa: F401
+from utils.settings import settings  # noqa: F401
 
 
 # Shinigami
-def switcharoo_condition(
-    effect_info: Effect, self: Combatant, other: Combatant, hit_roll: bool, att_type: AttackType | None
-) -> bool:
-    return other.shields == 0 and effect_info.trigger_count == 0
+def switcharoo_condition(effect: Effect, state: BattleState, signal: Signal, effect_from_a: bool) -> bool:
+    other = state.combatant_b if effect_from_a else state.combatant_a
+    return other.shields == 0 and effect.trigger_count == 0
 
 
-def switcharoo_effect(effect_info: Effect, self: Combatant, other: Combatant):
+def switcharoo_effect(effect: Effect, state: BattleState, signal: Signal, effect_from_a: bool):
+    self = state.combatant_a if effect_from_a else state.combatant_b
     self.chemical, self.firepower = self.firepower, self.chemical
 
 
@@ -26,13 +37,18 @@ shinigami = Combatant(
 
 
 # Suit
-def suit_extra_condition(
-    effect_info: Effect, self: Combatant, other: Combatant, hit_roll: bool, att_type: AttackType | None
-) -> bool:
-    return hit_roll and att_type == AttackType.BALLISTIC
+def suit_extra_condition(effect: Effect, state: BattleState, signal: Signal, effect_from_a: bool) -> bool:
+    if signal.type != SignalType.POST_HIT_ROLL:
+        return False
+
+    assert isinstance(state, AttackState)
+    assert isinstance(signal.data, HitRollData)
+
+    return signal.data.does_hit and state.att_type == AttackType.BALLISTIC
 
 
-def suit_extra_effect(effect_info: Effect, self: Combatant, other: Combatant):
+def suit_extra_effect(effect: Effect, state: BattleState, signal: Signal, effect_from_a: bool):
+    self = state.combatant_a if effect_from_a else state.combatant_b
     self.chemical += 60
 
 
@@ -49,48 +65,70 @@ suit = Combatant(
 
 
 # LCEnzo player
-def last_stand_condition(effect_info: Effect, self: Combatant, other: Combatant, hit_roll, att_type):
-    return self.armor == 0 and effect_info.trigger_count == 0
+def last_stand_condition(effect: Effect, state: BattleState, signal: Signal, effect_from_a: bool) -> bool:
+    # TODO: some kind of take damage condition or signal
+    self = state.combatant_a if effect_from_a else state.combatant_b
+    return self.armor == 0 and effect.trigger_count == 0
 
 
-def last_stand_effect(effect_info: Effect, self: Combatant, other: Combatant):
+def last_stand_effect(effect: Effect, state: BattleState, signal: Signal, effect_from_a: bool):
+    self = state.combatant_a if effect_from_a else state.combatant_b
     self.armor = 1
 
 
-def shield_plates_condition(effect_info: Effect, self: Combatant, other: Combatant, hit_roll, att_type):
-    return self.shields == 0 and effect_info.trigger_count == 0
+def shield_plates_condition(effect: Effect, state: BattleState, signal: Signal, effect_from_a: bool) -> bool:
+    # TODO: some kind of take damage condition or signal
+    self = state.combatant_a if effect_from_a else state.combatant_b
+    return self.shields == 0 and effect.trigger_count == 0
 
 
-def shield_plates_effect(effect_info: Effect, self: Combatant, other: Combatant):
+def shield_plates_effect(effect: Effect, state: BattleState, signal: Signal, effect_from_a: bool):
+    self = state.combatant_a if effect_from_a else state.combatant_b
     self.shields = 1
 
 
-def flare_knives_condition(effect_info: Effect, self: Combatant, other: Combatant, hit_roll, att_type, *args, **kwargs):
-    return effect_info.trigger_count < 10 and hit_roll is None  # Assuming hit_roll is None indicates start of round
+def flare_knives_condition(effect: Effect, state: BattleState, signal: Signal, effect_from_a: bool) -> bool:
+    return signal.type == SignalType.ROUND_START and effect.trigger_count < 10
 
 
-def flare_knives_effect(effect_info: Effect, self: Combatant, other: Combatant):
+def flare_knives_effect(effect: Effect, state: BattleState, signal: Signal, effect_from_a: bool):
+    other = state.combatant_b if effect_from_a else state.combatant_a
     other.apply_damage(15, AttackType.FIREPOWER)
 
 
-# TODO: Implement this, though it would be a good idea to not just pass parameters ad hoc, but actually store
-# current and previous states (engine, combatants) to compare, for this and other effects
-def tandem_demo(effect_info: Effect, self: Combatant, other: Combatant, hit_roll, att_type, *args, **kwargs) -> bool:
-    # if you break your enemy's shield with a firepower attack,
-    raise NotImplementedError()
+def tandem_demo_condition(effect: Effect, state: BattleState, signal: Signal, effect_from_a: bool) -> bool:
+    if signal.type != SignalType.POST_DMG_APPLICATION:
+        return False
+
+    assert isinstance(signal.data, DamageData)
+
+    other = state.combatant_b if effect_from_a else state.combatant_a
+    return (
+        isinstance(state, AttackState)
+        and state.att_type == AttackType.FIREPOWER
+        and signal.data.pre_damage_shields > 0
+        and other.shields <= 0
+    )
 
 
-def tandem_demo_effect(effect_info: Effect, self: Combatant, other: Combatant):
+def tandem_demo_effect(effect: Effect, state: BattleState, signal: Signal, effect_from_a: bool):
+    other = state.combatant_b if effect_from_a else state.combatant_a
     other.apply_damage(200, AttackType.FIREPOWER)
 
 
-def riposta_condition(effect_info: Effect, self: Combatant, other: Combatant, hit_roll, att_type):
-    return att_type and att_type == AttackType.FIREPOWER
+# def riposta_condition(effect: Effect, state: BattleState, signal: Signal, effect_from_a: bool) -> bool:
+#     return (
+#         signal.type == SignalType.POST_DMG_APPLICATION
+#         and isinstance(state, AttackState)
+#         and state.att_type == AttackType.FIREPOWER
+#         and signal.data.a_is_attacking
+#     )
 
 
-def riposta_effect(effect_info: Effect, self: Combatant, other: Combatant):
-    self.armor += 25
-    self.shields += 25
+# def riposta_effect(effect: Effect, state: BattleState, signal: Signal, effect_from_a: bool):
+#     self = state.combatant_a if effect_from_a else state.combatant_b
+#     self.armor += 25
+#     self.shields += 25
 
 
 # fmt: off
@@ -105,7 +143,9 @@ lcenzo = Combatant(
     effects=[
         Effect(name="Last Stand",    trigger_condition=last_stand_condition,    effect_func=last_stand_effect),
         Effect(name="Shield Plates", trigger_condition=shield_plates_condition, effect_func=shield_plates_effect),
-        Effect(name="Flare Knives",  trigger_condition=flare_knives_condition,  effect_func=flare_knives_effect)
+        Effect(name="Flare Knives",  trigger_condition=flare_knives_condition,  effect_func=flare_knives_effect),
+        Effect(name="Tandem Demo",   trigger_condition=tandem_demo_condition,   effect_func=tandem_demo_effect),
+        # Effect(name="Riposta",       trigger_condition=riposta_condition,       effect_func=riposta_effect),
     ],
     modifiers={
         "attack_hit_chance_mod": {

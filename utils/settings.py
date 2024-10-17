@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import enum
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -12,18 +14,6 @@ class Settings(BaseSettings):
     mode: Modes = Modes.PROD
 
     model_config = SettingsConfigDict(env_file=".env")
-
-    _instance = None
-
-    def __new__(cls, *args, **kwargs):
-        if cls._instance is None:
-            cls._instance = super().__new__(cls, *args, **kwargs)
-        return cls._instance
-
-    @classmethod
-    def reset(cls):
-        """Reset the singleton instance to allow reloading environment variables."""
-        cls._instance = None
 
     def is_debug(self) -> bool:
         return self.mode == Modes.DEBUG
