@@ -36,12 +36,18 @@ class BattleSimulator(BaseModel):
             return
 
         logger.info("Battle started.")
+
+        kwargs = {}
+        if settings.is_debug():
+            kwargs["random_seed"] = 0
+
         self.current_state = Start.initialize(
             main_a=self.main_a.model_copy(deep=True),
             adds_a=[m.model_copy(deep=True) for m in self.adds_a],
             main_b=self.main_b.model_copy(deep=True),
             adds_b=[m.model_copy(deep=True) for m in self.adds_b],
             terrain=self.terrain.model_copy(deep=True) if self.terrain else None,
+            **kwargs
         )
 
     def run_battle(self) -> None:
