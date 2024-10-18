@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import enum
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -13,7 +15,7 @@ class Settings(BaseSettings):
 
     model_config = SettingsConfigDict(env_file=".env")
 
-    _instance = None
+    _instance: Settings | None = None
 
     def __new__(cls, *args, **kwargs):
         if cls._instance is None:
@@ -33,3 +35,4 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+assert settings is not None
