@@ -422,6 +422,9 @@ class AttackState(TurnState, ABC):
             applied_damage = defender.apply_damage(damage, att_type)
             damage_data = DamageData(self.a_is_attacking, pre_damage_armor, pre_damage_shields, damage)
             self.apply_effects(Signal(SignalType.POST_DMG_APPLICATION, damage_data))
+            # For debugging
+            if settings.is_debug():
+                assert not (applied_damage == 0 and self.get_damage(attacker, defender) != 0)
             logger.info(f"{attacker.name} hits {defender.name} with {att_type.value} for {applied_damage} damage")
         else:
             logger.info(f"{attacker.name} misses {defender.name} with {att_type.value}")
