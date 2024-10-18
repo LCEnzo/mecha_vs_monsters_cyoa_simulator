@@ -23,3 +23,4 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+assert settings is not None
