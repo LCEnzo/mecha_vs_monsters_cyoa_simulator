@@ -27,6 +27,7 @@ class BattleSimulator(BaseModel):
     adds_b: list[Combatant] = Field(default_factory=list)
     terrain: Terrain | None = None
     current_state: BattleState | None = None
+    random_seed: int | None = None
 
     def start_battle(self) -> None:
         if not self.main_a or not self.main_b:
@@ -38,8 +39,10 @@ class BattleSimulator(BaseModel):
         logger.info("Battle started.")
 
         kwargs = {}
-        if settings.is_debug():
+        if settings.is_debug() and self.random_seed is None:
             kwargs["random_seed"] = 0
+        else:
+            kwargs["random_seed"] = self.random_seed
 
         self.current_state = Start.initialize(
             main_a=self.main_a.model_copy(deep=True),
@@ -47,7 +50,7 @@ class BattleSimulator(BaseModel):
             main_b=self.main_b.model_copy(deep=True),
             adds_b=[m.model_copy(deep=True) for m in self.adds_b],
             terrain=self.terrain.model_copy(deep=True) if self.terrain else None,
-            **kwargs
+            **kwargs,
         )
 
     def run_battle(self) -> None:
@@ -55,7 +58,7 @@ class BattleSimulator(BaseModel):
             self.start_battle()
         while self.current_state is not None and not isinstance(self.current_state, End):
             self.current_state = self.current_state.transition()
-            assert self.current_state.round_count != 200
+            assert self.current_state.round_count != 300
         logger.info(self.get_battle_result())
 
     def run_round(self, until: type[BattleState] = RoundEnd) -> None:

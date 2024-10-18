@@ -1,7 +1,11 @@
+from pprint import pprint
+
 import pytest
 
+from mvm.combatants import shinigami, suit
 from mvm.core import Effect, SignalType, Terrain, TurnStart
 from mvm.sim_interface import BattleSimulator, Combatant
+from mvm.terrains import badaxsan, lake_tampua
 from tests.utils import create_combatant
 
 
@@ -92,3 +96,86 @@ def test_terrain_effects():
     assert simulator.current_state is not None
     assert simulator.current_state.combatant_a.velocity == 5
     assert simulator.current_state.combatant_b.velocity == 5
+
+
+def test_battle_determinism():
+    """Test that battles with same seed produce identical results"""
+    seeds = [0, 420, 1453, 10000, 41635158]
+    terrains = [None, lake_tampua, badaxsan]
+
+    c = create_combatant(500, 500, 10, 10, 10, 250)
+
+    # fmt: off
+    combatant_pair_list: list[tuple[Combatant, Combatant]] = [
+        (suit, suit),
+        (suit, shinigami),
+        (c, c)
+    ]
+    # fmt: on
+
+    battle_count = 0
+
+    for seed in seeds:
+        for terrain in terrains:
+            for cpair in combatant_pair_list:
+                for _loop_count in range(5):
+                    # fmt: off
+                    sim1 = BattleSimulator(
+                        main_a=cpair[0], 
+                        main_b=cpair[1],
+                        terrain=terrain,
+                        random_seed=seed
+                    )
+                    # fmt: on
+                    sim1.run_battle()
+                    assert sim1.current_state is not None
+                    states1 = sim1.current_state.saved_states
+                    result1 = (
+                        sim1.current_state.combatant_a.armor,
+                        sim1.current_state.combatant_a.shields,
+                        sim1.current_state.combatant_b.armor,
+                        sim1.current_state.combatant_b.shields,
+                    )
+
+                    # fmt: off
+                    sim2 = BattleSimulator(
+                        main_a=cpair[0], 
+                        main_b=cpair[1],
+                        terrain=terrain,
+                        random_seed=seed
+                    )
+                    # fmt: on
+                    sim2.run_battle()
+                    assert sim2.current_state is not None
+                    states2 = sim2.current_state.saved_states
+                    result2 = (
+                        sim2.current_state.combatant_a.armor,
+                        sim2.current_state.combatant_a.shields,
+                        sim2.current_state.combatant_b.armor,
+                        sim2.current_state.combatant_b.shields,
+                    )
+
+                    battle_count += 1
+
+                    # Verify results match
+                    if result1 != result2:
+                        print(f"{battle_count = }\n")
+                        pprint(sim1)
+                        pprint(result1)
+                        print("")
+                        pprint(sim2)
+                        pprint(result2)
+                        print("")
+
+                    assert result1 == result2
+                    assert len(states1) == len(states2)
+
+                    # Verify each state transition matched
+                    for state1, state2 in zip(states1, states2):
+                        assert state1.__class__ == state2.__class__
+                        assert state1.combatant_a.armor == state2.combatant_a.armor
+                        assert state1.combatant_b.armor == state2.combatant_b.armor
+                        assert state1.combatant_a.shields == state2.combatant_a.shields
+                        assert state1.combatant_b.shields == state2.combatant_b.shields
+
+    print(f"{battle_count = }")

@@ -18,7 +18,7 @@ from utils.log_util import logger  # noqa: F401
 from utils.settings import settings  # noqa: F401
 
 
-class AttackType(str, enum.Enum):
+class AttackType(enum.StrEnum):
     FIREPOWER = "Firepower"
     CHEMICAL = "Chemical"
     BALLISTIC = "Ballistics"
