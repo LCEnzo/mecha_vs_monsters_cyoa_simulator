@@ -41,7 +41,7 @@ class BattleSimulator(BaseModel):
         kwargs = {}
         if settings.is_debug() and self.random_seed is None:
             kwargs["random_seed"] = 0
-        else:
+        elif self.random_seed is not None:
             kwargs["random_seed"] = self.random_seed
 
         self.current_state = Start.initialize(
