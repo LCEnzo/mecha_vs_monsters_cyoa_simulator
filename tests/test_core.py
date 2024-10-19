@@ -26,11 +26,11 @@ def test_can_do_battle_without_terrain() -> None:
     )
 
 
-@pytest.mark.timeout(60, method="thread")
+@pytest.mark.timeout(10, method="thread")
 def test_can_repeat_battle_alot() -> None:
     c = create_combatant(50, 50, 10, 10, 10)
     simulator = BattleSimulator(main_a=c.model_copy(deep=True), main_b=c.model_copy(deep=True))
-    target_battle_count = 60
+    target_battle_count = 300
 
     res, avg_round_count = simulator.run_multiple_battles(target_battle_count)
 
