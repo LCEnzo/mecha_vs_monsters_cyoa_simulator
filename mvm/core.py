@@ -11,7 +11,7 @@ from enum import Enum
 from functools import wraps
 from typing import Any, Callable, Literal, Self, TypeIs, TypeVarTuple, Unpack
 
-from line_profiler import profile  # noqa: F401
+# from line_profiler import profile  # noqa: F401
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from pydantic.dataclasses import dataclass
 from pydantic.fields import FieldInfo
