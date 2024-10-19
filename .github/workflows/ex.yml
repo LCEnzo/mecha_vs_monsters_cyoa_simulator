@@ -56,8 +56,10 @@ jobs:
         ruff format --check --diff .
 
     - name: Run tests and generate coverage
+      # -vlx means more verbose, capture local variables, and exit on first test fail
+      # We're also not running benchmarks
       run: |
-        pytest --cov --cov-report=xml
+        pytest --ignore=tests/test_benchmarks.py -vlx --cov --cov-report=xml
 
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v4
