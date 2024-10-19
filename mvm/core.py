@@ -6,12 +6,15 @@ import random
 import time
 import traceback  # noqa: F401
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import fields as dataclasses_fields
 from enum import Enum
 from functools import wraps
 from typing import Any, Callable, Literal, Self, TypeIs, TypeVarTuple, Unpack
 
+from line_profiler import profile  # noqa: F401
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic.dataclasses import dataclass
+from pydantic.fields import FieldInfo
 from termcolor import colored
 
 from utils.log_util import logger  # noqa: F401
@@ -86,6 +89,7 @@ class Effect(BaseModel):
     trigger_count: int = Field(default=0, ge=0)
     target_state: type[BattleState] | None = Field(default=None, frozen=True)
 
+    # profile
     def apply(
         self,
         curr_state: BattleState,
@@ -134,6 +138,8 @@ class Combatant(BaseModel):
     original_firepower: int = 0
     original_velocity: int = 0
 
+    model_config = ConfigDict(extra="forbid", arbitrary_types_allowed=True)  # slots=True ??
+
     @field_validator("armor", "shields", "ballistics", "chemical", "firepower", "velocity")
     @classmethod
     def check_positive(cls, v):
@@ -141,11 +147,13 @@ class Combatant(BaseModel):
             raise ValueError("Value must be non-negative")
         return v
 
+    # profile
     def merge(self, other: Combatant) -> Combatant:
         c = self.model_copy(deep=True)
         c.merge_inplace(other)
         return c
 
+    # profile
     def merge_inplace(self, other: Combatant) -> None:
         self.armor += other.armor
         self.shields += other.shields
@@ -154,8 +162,6 @@ class Combatant(BaseModel):
         self.firepower += other.firepower
         self.velocity += other.velocity
         self.effects.extend(other.effects)
-
-    model_config = ConfigDict(arbitrary_types_allowed=True)
 
     def __init__(self, **data):
         super().__init__(**data)
@@ -172,6 +178,7 @@ class Combatant(BaseModel):
         else:
             object.__setattr__(self, name, value)
 
+    # profile
     def apply_damage(self, damage: int, damage_type: AttackType) -> int:
         """Apply damage based on shields/armor and return the actual applied damage"""
         effective_hp = self.armor + self.shields
@@ -187,6 +194,7 @@ class Combatant(BaseModel):
         applied_damage = effective_hp - (self.shields + self.armor)
         return max(0, applied_damage)
 
+    # profile
     def modify_damage(self, damage: int, damage_type: AttackType) -> int:
         """Apply armor/shield reductions or buffs."""
         if damage_type == AttackType.FIREPOWER:
@@ -221,6 +229,9 @@ class Terrain(BaseModel):
     condition: Callable[[Self | Terrain, BattleState, Signal], bool] = lambda self, state, signal: True
     triggered: bool = False
 
+    model_config = ConfigDict(extra="forbid")  # slots=True ??
+
+    # profile
     def apply_effect(self, state: BattleState, signal: Signal, *args, **kwargs):
         if self.condition(self, state, signal, *args, **kwargs):
             self.effect(self, state, signal, *args, **kwargs)
@@ -230,16 +241,18 @@ class Terrain(BaseModel):
 
 # TODO: Consider where history should be stored (as part of the BattleState,
 #       as a concern for higher level structs, just dumped into a DB, or w/e)
-class BattleState(ABC, BaseModel):
-    combatant_a: Combatant = Field(repr=False)
-    combatant_b: Combatant = Field(repr=False)
+@dataclass(frozen=True, slots=True, config=ConfigDict(extra="forbid", arbitrary_types_allowed=True))
+class BattleState(ABC):
+    # When adding new fields, check `dump_for_transition`
+    main_a: Combatant  # = Field()
+    main_b: Combatant  # = Field()
+    adds_a: list[Combatant] = Field(default_factory=list)
+    adds_b: list[Combatant] = Field(default_factory=list)
 
-    main_a: Combatant
-    adds_a: list[Combatant]
-    main_b: Combatant
-    adds_b: list[Combatant]
-
-    terrain: Terrain | None = None
+    terrain: Terrain | None = Field(default=None)
+    # TODO fix typing/default
+    combatant_a: Combatant = Field()
+    combatant_b: Combatant = Field()
 
     round_count: int = 0
     random_seed: int = Field(default_factory=lambda: random.randint(0, 2**32 - 1))
@@ -247,8 +260,7 @@ class BattleState(ABC, BaseModel):
 
     saved_states: list[BattleState] = Field(default_factory=lambda: [], exclude=True, repr=False)
 
-    model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
-
+    # profile
     def apply_effects(self, signal: Signal, *args, **kwargs):
         if self.terrain:
             self.terrain.apply_effect(self, signal, *args, **kwargs)
@@ -261,26 +273,53 @@ class BattleState(ABC, BaseModel):
     def _transition(self) -> BattleState:
         pass
 
+    # profile
     def transition(self) -> BattleState:
         self.save_state()
         return self._transition()
 
-    def save_state(self):
-        archived = self.model_copy(deep=True)
-        object.__setattr__(archived, "saved_states", [])
+    # profile
+    def save_state(self) -> None:
+        dump: dict = self.dump_for_transition(honor_exclude=False)
+        dump.pop("saved_states", None)
+        dump.pop("archived_copy", None)
+
+        if isinstance(self, End):
+            dump["archived_copy"] = True
+        archived = self.__class__(**dump)
         self.saved_states.append(archived)
         # TODO: Save to DB ?
 
     def had_someone_died(self) -> bool:
         return self.combatant_a.is_dead() or self.combatant_b.is_dead()
 
-    def dump_for_transition(self) -> dict[str, Any]:
-        d = self.model_dump()
-        d["combatant_a"] = self.combatant_a
-        d["combatant_b"] = self.combatant_b
-        d["rng"] = self.rng
-        d["saved_states"] = self.saved_states
-        return d
+    # profile
+    def dump_for_transition(self, honor_exclude: bool = True) -> dict[str, Any]:
+        """
+        Dynamically creates a dictionary of all fields in the dataclass,
+        excluding those marked with exclude=True in their Field definition.
+
+        Meant for use in transition() and _transition() methods.
+        """
+        fields = dataclasses_fields(self)
+        fields_dict = {
+            field.name: getattr(self, field.name)
+            for field in fields
+            if not honor_exclude
+            or not (
+                (
+                    hasattr(field, "default")
+                    and isinstance(field.default, FieldInfo)
+                    or (callable(field.default) and getattr(field.default, "exclude", False))
+                )
+                or (
+                    hasattr(field, "default_factory")
+                    and isinstance(field.default_factory, FieldInfo)
+                    or (callable(field.default_factory) and getattr(field.default_factory, "exclude", False))
+                )
+            )
+        }
+        return fields_dict
 
     @staticmethod
     def save_before_transition(func: Callable) -> Callable:
@@ -302,6 +341,7 @@ class BattleState(ABC, BaseModel):
         object.__setattr__(self, "rng", random.Random(random_seed))
 
 
+@dataclass(frozen=True, slots=True, config=ConfigDict(extra="ignore", arbitrary_types_allowed=True))
 class Start(BattleState):
     @classmethod
     def initialize(
@@ -325,6 +365,8 @@ class Start(BattleState):
         for cb in adds_b:
             combatant_b.merge_inplace(cb)
 
+        logger.info(f"{random_seed = }, {rng = }")
+
         return cls(
             combatant_a=combatant_a,
             main_a=main_a,
@@ -339,20 +381,24 @@ class Start(BattleState):
 
     def _transition(self) -> RoundStart:
         self.apply_effects(Signal(SignalType.BATTLE_START))
-        return RoundStart(**self.dump_for_transition())
+        return RoundStart(**self.dump_for_transition(honor_exclude=False))
 
 
+@dataclass(frozen=True, slots=True, config=ConfigDict(extra="ignore", arbitrary_types_allowed=True))
 class RoundStart(BattleState):
+    # profile
     def _transition(self) -> VelocityRoll:
         rc = self.round_count
         # https://stackoverflow.com/questions/53756788/how-to-set-the-value-of-dataclass-field-in-post-init-when-frozen-true
         object.__setattr__(self, "round_count", self.round_count + 1)
         self.apply_effects(Signal(SignalType.ROUND_START))
         assert rc == self.round_count - 1
-        return VelocityRoll(**self.dump_for_transition())
+        return VelocityRoll(**self.dump_for_transition(honor_exclude=False))
 
 
+@dataclass(frozen=True, slots=True, config=ConfigDict(extra="ignore", arbitrary_types_allowed=True))
 class VelocityRoll(BattleState):
+    # profile
     def _transition(self) -> TurnStart:
         self.apply_effects(Signal(SignalType.PRE_VELOCITY_ROLL))
 
@@ -388,22 +434,25 @@ class VelocityRoll(BattleState):
         )
 
         return TurnStart(
-            **self.dump_for_transition(),
+            **self.dump_for_transition(honor_exclude=False),
             a_is_attacking=a_is_attacking,
             has_a_finished_their_turn=False,
             has_b_finished_their_turn=False,
         )
 
 
+@dataclass(frozen=True, slots=True, config=ConfigDict(extra="ignore", arbitrary_types_allowed=True))
 class TurnState(BattleState, ABC):
-    a_is_attacking: bool
-    has_a_finished_their_turn: bool
-    has_b_finished_their_turn: bool
+    a_is_attacking: bool = Field()
+    has_a_finished_their_turn: bool = Field()
+    has_b_finished_their_turn: bool = Field()
 
 
+@dataclass(frozen=True, slots=True, config=ConfigDict(extra="ignore", arbitrary_types_allowed=True))
 class AttackState(TurnState, ABC):
-    att_type: AttackType
+    att_type: AttackType = Field()
 
+    # profile
     def process_attack(self) -> None:
         att_type = self.att_type
 
@@ -441,6 +490,7 @@ class AttackState(TurnState, ABC):
         else:
             logger.info(f"{attacker.name} misses {defender.name} with {att_type.value}")
 
+    # profile
     def calculate_hit(self, attacker: Combatant, defender: Combatant) -> bool:
         """Calculate whether an attack hits, taking into account modifiers."""
         att_type = self.att_type
@@ -485,41 +535,64 @@ class AttackState(TurnState, ABC):
         return isinstance(val, AttackType)
 
 
+@dataclass(frozen=True, slots=True, config=ConfigDict(extra="ignore", arbitrary_types_allowed=True))
 class TurnStart(TurnState):
     def _transition(self) -> FirepowerAttack:
         self.apply_effects(Signal(SignalType.TURN_START))
-        return FirepowerAttack(**self.dump_for_transition())
+        return FirepowerAttack(**self.dump_for_transition(honor_exclude=False))
 
 
+@dataclass(frozen=True, slots=True, config=ConfigDict(extra="ignore", arbitrary_types_allowed=True))
 class FirepowerAttack(AttackState):
     att_type: AttackType = Field(default=AttackType.FIREPOWER, frozen=True)
 
+    # profile
     def _transition(self) -> BallisticsAttack | TurnEnd:
+        assert self.att_type == AttackType.FIREPOWER
         self.process_attack()
+
+        dump = self.dump_for_transition(honor_exclude=False)
+        dump.pop("att_type", None)
+
         if self.had_someone_died():
-            return TurnEnd(**self.dump_for_transition())
-        return BallisticsAttack(**self.dump_for_transition())
+            return TurnEnd(**dump)
+        return BallisticsAttack(**dump)
 
 
+@dataclass(frozen=True, slots=True, config=ConfigDict(extra="ignore", arbitrary_types_allowed=True))
 class BallisticsAttack(AttackState):
     att_type: AttackType = Field(default=AttackType.BALLISTIC, frozen=True)
 
+    # profile
     def _transition(self) -> ChemicalAttack | TurnEnd:
+        assert self.att_type == AttackType.BALLISTIC
         self.process_attack()
+
+        dump = self.dump_for_transition(honor_exclude=False)
+        dump.pop("att_type", None)
+
         if self.had_someone_died():
-            return TurnEnd(**self.dump_for_transition())
-        return ChemicalAttack(**self.dump_for_transition())
+            return TurnEnd(**dump)
+        return ChemicalAttack(**dump)
 
 
+@dataclass(frozen=True, slots=True, config=ConfigDict(extra="ignore", arbitrary_types_allowed=True))
 class ChemicalAttack(AttackState):
     att_type: AttackType = Field(default=AttackType.CHEMICAL, frozen=True)
 
+    # profile
     def _transition(self) -> TurnEnd:
+        assert self.att_type == AttackType.CHEMICAL
         self.process_attack()
-        return TurnEnd(**self.dump_for_transition())
+
+        dump = self.dump_for_transition(honor_exclude=False)
+        dump.pop("att_type", None)
+        return TurnEnd(**dump)
 
 
+@dataclass(frozen=True, slots=True, config=ConfigDict(extra="ignore", arbitrary_types_allowed=True))
 class TurnEnd(TurnState):
+    # profile
     def _transition(self) -> RoundEnd | TurnStart:
         a_finished = self.has_a_finished_their_turn
         b_finished = self.has_b_finished_their_turn
@@ -535,33 +608,37 @@ class TurnEnd(TurnState):
 
         if self.had_someone_died():
             # This is fine, we don't need to update the state, as RoundEnd does not track who finished their turn
-            return RoundEnd(**self.dump_for_transition())
+            return RoundEnd(**self.dump_for_transition(honor_exclude=False))
 
         if a_finished and b_finished:
             # This is fine, we don't need to update the state, as RoundEnd does not track who finished their turn
-            return RoundEnd(**self.dump_for_transition())
+            return RoundEnd(**self.dump_for_transition(honor_exclude=False))
 
         object.__setattr__(self, "a_is_attacking", not self.a_is_attacking)
-        return TurnStart(**self.dump_for_transition())
+        return TurnStart(**self.dump_for_transition(honor_exclude=False))
 
 
+@dataclass(frozen=True, slots=True, config=ConfigDict(extra="ignore", arbitrary_types_allowed=True))
 class RoundEnd(BattleState):
+    # profile
     def _transition(self) -> End | RoundStart:
         self.apply_effects(Signal(SignalType.ROUND_END))
 
         if self.had_someone_died():
             self.apply_effects(Signal(SignalType.BATTLE_END))
-            return End(**self.dump_for_transition())
+            return End(**self.dump_for_transition(honor_exclude=False))
 
-        return RoundStart(**self.dump_for_transition())
+        return RoundStart(**self.dump_for_transition(honor_exclude=False))
 
 
+@dataclass(frozen=True, slots=True, config=ConfigDict(extra="ignore", arbitrary_types_allowed=True))
 class End(BattleState):
+    archived_copy: bool = Field(default=False)
+
     def __post_init__(self):
-        ret = None
-        # ret = super().__post_init__()
-        self.save_state()
-        return ret
+        if not self.archived_copy:
+            self.save_state()
+        return None
 
     def transition(self) -> End:
         raise Exception("Can't transition from End state")

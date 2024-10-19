@@ -3,7 +3,7 @@ from pprint import pprint
 import pytest
 
 from mvm.combatants import shinigami, suit
-from mvm.core import Effect, SignalType, Terrain, TurnStart
+from mvm.core import Effect, End, SignalType, Start, Terrain, TurnStart
 from mvm.sim_interface import BattleSimulator, Combatant
 from mvm.terrains import badaxsan, lake_tampua
 from tests.utils import create_combatant
@@ -179,3 +179,49 @@ def test_battle_determinism():
                         assert state1.combatant_b.shields == state2.combatant_b.shields
 
     print(f"{battle_count = }")
+
+
+def test_replay_from_saved_state():
+    c = create_combatant(500, 500, 10, 10, 10, 250)
+    seed = 42
+    simulator = BattleSimulator(main_a=c, main_b=c, random_seed=seed)
+
+    simulator.run_battle()
+    assert simulator.current_state is not None
+
+    saved_states = simulator.current_state.saved_states
+
+    initial_state = next(state for state in saved_states if isinstance(state, Start))
+    final_state = next(state for state in reversed(saved_states) if isinstance(state, End))
+
+    replay_simulator = BattleSimulator(
+        main_a=initial_state.main_a,
+        main_b=initial_state.main_b,
+        terrain=initial_state.terrain,
+        random_seed=initial_state.random_seed,
+    )
+
+    replay_simulator.run_battle()
+
+    # Check battle ended correctly, that we're in the correct state
+    assert replay_simulator.current_state is not None
+    assert isinstance(replay_simulator.current_state, End)
+
+    # Check results
+    assert replay_simulator.current_state.round_count == final_state.round_count
+    assert replay_simulator.current_state.combatant_a.armor == final_state.combatant_a.armor
+    assert replay_simulator.current_state.combatant_a.shields == final_state.combatant_a.shields
+    assert replay_simulator.current_state.combatant_b.armor == final_state.combatant_b.armor
+    assert replay_simulator.current_state.combatant_b.shields == final_state.combatant_b.shields
+
+    # Compare all saved states
+    replay_saved_states = replay_simulator.current_state.saved_states
+    assert len(replay_saved_states) == len(saved_states)
+
+    for original_state, replay_state in zip(saved_states, replay_saved_states):
+        assert type(original_state) is type(replay_state)
+        assert original_state.round_count == replay_state.round_count
+        assert original_state.combatant_a.armor == replay_state.combatant_a.armor
+        assert original_state.combatant_a.shields == replay_state.combatant_a.shields
+        assert original_state.combatant_b.armor == replay_state.combatant_b.armor
+        assert original_state.combatant_b.shields == replay_state.combatant_b.shields
