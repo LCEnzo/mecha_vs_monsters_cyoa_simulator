@@ -43,17 +43,6 @@ jobs:
       run: |
         pip check
 
-    - name: Run tests and generate coverage
-      run: |
-        pytest --cov --cov-report=xml
-
-    - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@v4
-      with:
-        file: ./coverage.xml
-        flags: unittests
-        token: ${{ secrets.CODECOV_TOKEN }}
-
     - name: Check types with mypy
       run: |
         mypy --show-traceback --check-untyped-defs --local-partial-types .
@@ -65,3 +54,16 @@ jobs:
     - name: Check formatting with ruff
       run: |
         ruff format --check --diff .
+
+    - name: Run tests and generate coverage
+      # -vlx means more verbose, capture local variables, and exit on first test fail
+      # We're also not running benchmarks
+      run: |
+        pytest --ignore=tests/test_benchmarks.py -vlx --cov --cov-report=xml
+
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v4
+      with:
+        file: ./coverage.xml
+        flags: unittests
+        token: ${{ secrets.CODECOV_TOKEN }}

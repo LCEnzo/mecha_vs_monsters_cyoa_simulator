@@ -65,6 +65,9 @@ testpaths = [
     "tests"
 ]
 
+[tool.pytest]
+timeout = 5
+
 [tool.coverage.run]
 # source = ["main.py", "mvm", "utils"]
 omit = ["tests/*"]

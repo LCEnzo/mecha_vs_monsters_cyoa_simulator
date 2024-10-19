@@ -1,7 +1,11 @@
+ruff~=0.7.0
+
 mypy~=1.12.0
 mypy-extensions
 types-PyYAML 
 types-Pygments 
 types-colorama 
 types-setuptools
-ruff~=0.7.0
+types-decorator 
+types-python-dateutil 
+types-six

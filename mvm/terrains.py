@@ -1,43 +1,75 @@
-from mvm.core import AttackType, Combatant, CombatEngine, Terrain
+from mvm.core import AttackState, AttackType, BattleState, DamageData, HitRollData, Signal, SignalType, Terrain
 from utils.log_util import logger  # noqa: F401
+from utils.settings import settings  # noqa: F401
 
 
 # Universal
-def at_start_cond(self: Terrain, engine: CombatEngine) -> bool:
-    return self.triggered
+def at_start_cond(self: Terrain, state: BattleState, signal: Signal) -> bool:
+    return signal.type == SignalType.BATTLE_START
 
 
 # Hela
-def hela_effect(self: Terrain, engine: CombatEngine):
-    def check_armor_loss(self: Combatant, damage: int, armor_dmg: int, shields_dmg: int, damage_type: AttackType):
-        if damage * 10 >= self.original_armor:
-            self.apply_damage(40, AttackType.BALLISTIC)
+def hela_cond(self: Terrain, state: BattleState, signal: Signal) -> bool:
+    if signal.type != SignalType.POST_DMG_APPLICATION:
+        return False
 
-    for combatant in [engine.combatant_a, engine.combatant_b]:
-        if check_armor_loss not in combatant.on_damage_taken_effects:
-            combatant.on_damage_taken_effects.append(check_armor_loss)
+    if signal.data is None:
+        logger.warning(f"Wrong data for signal type in hela_effect terrain {self}\nstate {state}\nsignal {signal}\n")
+        if settings.is_debug():
+            assert isinstance(signal.data, DamageData)
+        return False
+
+    return True
+
+
+def hela_effect(self: Terrain, state: BattleState, signal: Signal):
+    assert signal.type == SignalType.POST_DMG_APPLICATION
+    assert isinstance(signal.data, DamageData)
+
+    defender = state.combatant_b if signal.data.attacker_is_a else state.combatant_a
+    damage = signal.data.damage
+
+    if damage * 10 >= defender.original_armor:
+        defender.apply_damage(40, AttackType.BALLISTIC)
 
 
 hela = Terrain(
     name="Hela",
     description=(
         "When a combatant loses 10% or more of their maximum Armor in a single attack, they take an "
-        + "additional 40 Ballistics damage."
+        "additional 40 Ballistics damage."
     ),
     effect=hela_effect,
-    condition=at_start_cond,
+    condition=hela_cond,
 )
 
 
 # Lake Tampua
-def lake_tampua_effect(self: Terrain, engine: CombatEngine):
-    def check_low_roll(self: Combatant, roll: int, attack_type: AttackType):
-        if roll < 100:
-            self.apply_damage(100, AttackType.BALLISTIC)
-            self.velocity = max(0, self.velocity - 50)
+def lake_tampua_cond(self: Terrain, state: BattleState, signal: Signal) -> bool:
+    if signal.type != SignalType.POST_HIT_ROLL:
+        return False
 
-    for combatant in [engine.combatant_a, engine.combatant_b]:
-        combatant.on_hit_roll_effects.append(check_low_roll)
+    if signal.data is None:
+        logger.warning(
+            f"Wrong data for signal type in lake_tampua_effect terrain {self}\nstate {state}\nsignal {signal}\n"
+        )
+        if settings.is_debug():
+            assert isinstance(signal.data, HitRollData)
+        return False
+
+    return True
+
+
+def lake_tampua_effect(self: Terrain, state: BattleState, signal: Signal):
+    assert signal.type == SignalType.POST_HIT_ROLL
+    assert isinstance(signal.data, HitRollData)
+    assert isinstance(state, AttackState)
+
+    attacker = state.combatant_a if state.a_is_attacking else state.combatant_b
+
+    if signal.data.base_roll < 100:
+        attacker.apply_damage(100, AttackType.BALLISTIC)
+        attacker.velocity = max(0, attacker.velocity - 50)
 
 
 lake_tampua = Terrain(
@@ -46,76 +78,76 @@ lake_tampua = Terrain(
         "When a combatant rolls below 100 on a hit roll, they take 100 Ballistics damage and lose up to 50 Velocity."
     ),
     effect=lake_tampua_effect,
-    condition=at_start_cond,
+    condition=lake_tampua_cond,
 )
 
+
 # Malvinas
-# def malvinas_effect(self: Terrain, engine: CombatEngine):
-#     old_calculate_hit = engine.calculate_hit
-#     def new_calculate_hit(attacker: Combatant, defender: Combatant, att_type: AttackType):
-#         if att_type == AttackType.BALLISTIC:
-#             attacker.modifiers.setdefault("attack_hit_chance_mod", {})
-#             attacker.modifiers["attack_hit_chance_mod"][AttackType.BALLISTIC] = (
-#                 attacker.modifiers.get("attack_hit_chance_mod", {}).get(AttackType.BALLISTIC, 0) + 20
-#             )
-#         result = old_calculate_hit(attacker, defender, att_type)
-#         if att_type == AttackType.BALLISTIC:
-#             attacker.modifiers["attack_hit_chance_mod"][AttackType.BALLISTIC] -= 20
-#         return result
-#     engine.calculate_hit = new_calculate_hit
+def malvinas_cond(self: Terrain, state: BattleState, signal: Signal) -> bool:
+    return (
+        signal.type in [SignalType.POST_HIT_ROLL, SignalType.POST_DMG_CALC]
+        and isinstance(state, AttackState)
+        and state.att_type == AttackType.BALLISTIC
+    )
 
-#     for combatant in [engine.combatant_a, engine.combatant_b]:
-#         old_get_damage = combatant.get_damage
-#         def new_get_damage(damage_type: AttackType):
-#             damage = old_get_damage(damage_type)
-#             if damage_type == AttackType.BALLISTIC:
-#                 damage += 20
-#             return damage
-#         combatant.get_damage = new_get_damage
 
-# malvinas = Terrain(
-#     name="Malvinas",
-#     description="Increase all Ballistics hit rolls and damage by 20.",
-#     effect=malvinas_effect,
-#     condition=at_start_cond
-# )
+def malvinas_effect(self: Terrain, state: BattleState, signal: Signal):
+    assert signal.type in [SignalType.POST_HIT_ROLL, SignalType.POST_DMG_CALC]
+    assert isinstance(state, AttackState)
+    assert state.att_type == AttackType.BALLISTIC
+
+    if signal.type == SignalType.POST_HIT_ROLL:
+        assert isinstance(signal.data, HitRollData)
+        signal.data.base_roll += 20
+    elif signal.type == SignalType.POST_DMG_CALC:
+        assert isinstance(signal.data, DamageData)
+        signal.data.damage += 20
+
+
+malvinas = Terrain(
+    name="Malvinas",
+    description="Increase all Ballistics hit rolls and damage by 20.",
+    effect=malvinas_effect,
+    condition=malvinas_cond,
+)
 
 
 # Okavango
-def okavango_effect(self: Terrain, engine: CombatEngine):
-    def reduce_velocity_on_miss(self: Combatant, hit: bool, attack_type: AttackType):
-        if not hit:
-            self.velocity = max(0, self.velocity - 11)
-
-    for combatant in [engine.combatant_a, engine.combatant_b]:
-        combatant.on_attack_result_effects.append(reduce_velocity_on_miss)
+# TODO: Make the effect temp
+# def okavango_cond(self: Terrain, state: BattleState, signal: Signal) -> bool:
+#     return signal.type == SignalType.POST_ATTACK
 
 
-okavango = Terrain(
-    name="Okavango",
-    description=(
-        "Whenever a combatant misses an attack, reduce their Velocity by up to 11 until the start of their next turn."
-    ),
-    effect=okavango_effect,
-    condition=at_start_cond,
-)
+# def okavango_effect(self: Terrain, state: BattleState, signal: Signal):
+#     assert signal.type == SignalType.POST_ATTACK
+#     assert isinstance(state, AttackState)
+
+#     attacker = state.combatant_a if state.a_is_attacking else state.combatant_b
+
+#     if not signal.data.does_hit:
+#         attacker.velocity = max(0, attacker.velocity - 11)
+
+
+# okavango = Terrain(
+#     name="Okavango",
+#     description=(
+#         "Whenever a combatant misses an attack, reduce their Velocity by up to 11 until the start of their next turn."
+#     ),
+#     effect=okavango_effect,
+#     condition=okavango_cond,
+# )
 
 
 # Ruthenian Grasses
-def ruthenian_grasses_effect(self: Terrain, engine: CombatEngine):
-    # TODO: Implement
+def ruthenian_grasses_effect(self: Terrain, state: BattleState, signal: Signal):
+    assert signal.type == SignalType.BATTLE_START
 
-    # old_calculate_hit = engine.calculate_hit
-    # def new_calculate_hit(attacker: Combatant, defender: Combatant, att_type: AttackType):
-    #     attacker.modifiers.setdefault("attack_hit_chance_mod", {})
-    #     attacker.modifiers["attack_hit_chance_mod"][att_type] = (
-    #          attacker.modifiers.get("attack_hit_chance_mod", {}).get(att_type, 0) - 20
-    #     )
-    #     result = old_calculate_hit(attacker, defender, att_type)
-    #     attacker.modifiers["attack_hit_chance_mod"][att_type] += 20
-    #     return result
-    # engine.calculate_hit = new_calculate_hit
-    raise NotImplementedError()
+    for att_type in list(AttackType):
+        a_mod = state.combatant_a.modifiers.get("attack_hit_chance_mod", {}).get(att_type, 0) - 20
+        state.combatant_a.modifiers["attack_hit_chance_mod"][att_type] = a_mod
+
+        b_mod = state.combatant_b.modifiers.get("attack_hit_chance_mod", {}).get(att_type, 0) - 20
+        state.combatant_b.modifiers["attack_hit_chance_mod"][att_type] = b_mod
 
 
 ruthenian_grasses = Terrain(
@@ -127,30 +159,44 @@ ruthenian_grasses = Terrain(
 
 
 # Badaxsan
-def badaxsan_effect(self: Terrain, engine: CombatEngine):
-    def check_attack_dmg(
-        self: Combatant, damage: int, armor_dmg: int, shields_dmg: int, damage_type: AttackType
-    ) -> None:
-        if damage >= 40 and damage_type == AttackType.BALLISTIC:
-            self.velocity -= 4
+def badaxsan_cond(self: Terrain, state: BattleState, signal: Signal) -> bool:
+    if signal.type != SignalType.POST_DMG_APPLICATION:
+        return False
 
-    for combatant in [engine.combatant_a, engine.combatant_b]:
-        combatant.on_damage_taken_effects.append(check_attack_dmg)
+    if signal.data is None:
+        logger.warning(f"Wrong Signal type in badaxsan_effect terrain {self}\nstate {state}\nsignal {signal}\n")
+        if settings.is_debug():
+            assert isinstance(signal.data, DamageData)
+        return False
+
+    return isinstance(state, AttackState) and state.att_type == AttackType.BALLISTIC
+
+
+def badaxsan_effect(self: Terrain, state: BattleState, signal: Signal):
+    assert signal.type == SignalType.POST_DMG_APPLICATION
+    assert isinstance(signal.data, DamageData)
+    assert isinstance(state, AttackState)
+    assert state.att_type == AttackType.BALLISTIC
+
+    defender = state.combatant_b if signal.data.attacker_is_a else state.combatant_a
+
+    if signal.data.damage > 0:
+        defender.velocity = max(0, defender.velocity - 4)
 
 
 badaxsan = Terrain(
     name="Badaxsan",
-    description=("Whenever a combatant takes Ballistics damage, reduce their Velocity by up to 4."),
+    description="Whenever a combatant takes Ballistics damage, reduce their Velocity by up to 4.",
     effect=badaxsan_effect,
-    condition=at_start_cond,
+    condition=badaxsan_cond,
 )
 
 
 terrains: dict[str, Terrain] = {
     "Hela": hela,
     "Lake Tampua": lake_tampua,
-    # "Malvinas": malvinas,
-    "Okavango": okavango,
+    "Malvinas": malvinas,
+    # "Okavango": okavango,
     "Ruthenian Grasses": ruthenian_grasses,
     "Badaxsan": badaxsan,
     # Add more terrains to this dictionary...

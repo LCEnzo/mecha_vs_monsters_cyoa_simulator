@@ -5,7 +5,7 @@ from typing import Generic, TypeVar
 from pydantic import BaseModel
 
 from mvm.combatants import combatants
-from mvm.core import BattleConfig, BattleSimulator, Combatant, Terrain
+from mvm.sim_interface import BattleConfig, BattleSimulator, Combatant, Terrain
 from mvm.terrains import terrains
 from utils.log_util import logger
 from utils.settings import settings  # noqa: F401
@@ -45,7 +45,7 @@ def run_config_battles(battle_config: BattleConfig, simulator: BattleSimulator) 
         simulator.load_terrain(terrain)
 
         logger.info(f"Starting {battle.name}")
-        simulator.start_battle()
+        simulator.run_battle()
         print("")
 
 
@@ -61,7 +61,7 @@ def main() -> None:
         print("1. Load combatants")
         print("2. Load terrain")
         print("3. View combatants")
-        print("4. /")
+        print("4. Set random seed")
         print("5. Modify combatant")
         print("6. Start battle")
         print("7. Simulate round")
@@ -81,15 +81,28 @@ def main() -> None:
             simulator.load_terrain(terrain)
         elif choice == "3":
             simulator.view_combatants_and_terrain()
+        elif choice == "4":
+            print(f"Current seed is {simulator.random_seed = }")
+            print(
+                f"Current mode is {settings.mode = }. If DEBUG, None seed will result in using 0 as the seed, "
+                "otherwise we will use current time"
+            )
+            seed_str = input("Enter the random seed (an integer or None to use the current time each battle): ")
+            try:
+                seed = None if seed_str.strip().lower() == "none" else int(seed_str)
+                simulator.random_seed = seed
+                print(f"Set seed to {seed = }")
+            except Exception as e:
+                logger.error(f"Failed to set seed | {e = }")
         elif choice == "5":
             side = input("Which combatant to modify? (A/B): ")
             attribute = input("Enter attribute to modify: ")
             new_value = int(input(f"Enter new value for {attribute}: "))
-            print(simulator.modify_combatant(side, attribute, new_value))
+            simulator.modify_combatant(side, attribute, new_value)
         elif choice == "6":
             simulator.start_battle()
         elif choice == "7":
-            simulator.simulate_round()
+            simulator.run_round()
         elif choice == "8":
             print(simulator.get_battle_result())
         elif choice == "9":
