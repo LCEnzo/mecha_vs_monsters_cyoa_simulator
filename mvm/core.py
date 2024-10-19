@@ -244,19 +244,16 @@ class Terrain(BaseModel):
 @dataclass(frozen=True, slots=True, config=ConfigDict(extra="forbid", arbitrary_types_allowed=True))
 class BattleState(ABC):
     # When adding new fields, check `dump_for_transition`
+    combatant_a: Combatant
+    combatant_b: Combatant
     main_a: Combatant  # = Field()
     main_b: Combatant  # = Field()
+    rng: random.Random = Field(exclude=True, repr=False)
     adds_a: list[Combatant] = Field(default_factory=list)
     adds_b: list[Combatant] = Field(default_factory=list)
-
     terrain: Terrain | None = Field(default=None)
-    # TODO fix typing/default
-    combatant_a: Combatant = Field()
-    combatant_b: Combatant = Field()
-
-    round_count: int = 0
+    round_count: int = Field(default=0)
     random_seed: int = Field(default_factory=lambda: random.randint(0, 2**32 - 1))
-    rng: random.Random = Field(exclude=True, repr=False)
 
     saved_states: list[BattleState] = Field(default_factory=lambda: [], exclude=True, repr=False)
 
@@ -443,14 +440,14 @@ class VelocityRoll(BattleState):
 
 @dataclass(frozen=True, slots=True, config=ConfigDict(extra="ignore", arbitrary_types_allowed=True))
 class TurnState(BattleState, ABC):
-    a_is_attacking: bool = Field()
-    has_a_finished_their_turn: bool = Field()
-    has_b_finished_their_turn: bool = Field()
+    a_is_attacking: bool = Field(default=False)
+    has_a_finished_their_turn: bool = Field(default=False)
+    has_b_finished_their_turn: bool = Field(default=False)
 
 
 @dataclass(frozen=True, slots=True, config=ConfigDict(extra="ignore", arbitrary_types_allowed=True))
 class AttackState(TurnState, ABC):
-    att_type: AttackType = Field()
+    att_type: AttackType = Field(default=AttackType.FIREPOWER)
 
     # profile
     def process_attack(self) -> None:
