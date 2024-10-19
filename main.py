@@ -61,7 +61,7 @@ def main() -> None:
         print("1. Load combatants")
         print("2. Load terrain")
         print("3. View combatants")
-        print("4. /")
+        print("4. Set random seed")
         print("5. Modify combatant")
         print("6. Start battle")
         print("7. Simulate round")
@@ -81,6 +81,19 @@ def main() -> None:
             simulator.load_terrain(terrain)
         elif choice == "3":
             simulator.view_combatants_and_terrain()
+        elif choice == "4":
+            print(f"Current seed is {simulator.random_seed = }")
+            print(
+                f"Current mode is {settings.mode = }. If DEBUG, None seed will result in using 0 as the seed, "
+                "otherwise we will use current time"
+            )
+            seed_str = input("Enter the random seed (an integer or None to use the current time each battle): ")
+            try:
+                seed = None if seed_str.strip().lower() == "none" else int(seed_str)
+                simulator.random_seed = seed
+                print(f"Set seed to {seed = }")
+            except Exception as e:
+                logger.error(f"Failed to set seed | {e = }")
         elif choice == "5":
             side = input("Which combatant to modify? (A/B): ")
             attribute = input("Enter attribute to modify: ")

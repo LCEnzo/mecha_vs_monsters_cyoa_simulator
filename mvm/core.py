@@ -291,6 +291,16 @@ class BattleState(ABC, BaseModel):
 
         return wrapper
 
+    def set_new_rng(self, random_seed: int | None = None) -> None:
+        if random_seed is None:
+            random_seed = int(time.time_ns())
+            if self.random_seed >= random_seed:
+                random_seed += self.random_seed + 1
+
+        # https://stackoverflow.com/questions/53756788/how-to-set-the-value-of-dataclass-field-in-post-init-when-frozen-true
+        object.__setattr__(self, "random_seed", random_seed)
+        object.__setattr__(self, "rng", random.Random(random_seed))
+
 
 class Start(BattleState):
     @classmethod
@@ -301,8 +311,10 @@ class Start(BattleState):
         adds_a: list[Combatant],
         adds_b: list[Combatant],
         terrain: Terrain | None = None,
-        random_seed: int = int(time.time()),
+        random_seed: int | None = None,
     ) -> Start:
+        if random_seed is None:
+            random_seed = int(time.time_ns())
         rng = random.Random(random_seed)
 
         combatant_a = main_a.model_copy(deep=True)

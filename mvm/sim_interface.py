@@ -41,8 +41,10 @@ class BattleSimulator(BaseModel):
         kwargs = {}
         if settings.is_debug() and self.random_seed is None:
             kwargs["random_seed"] = 0
+            logger.debug(f"[start_battle] Using {self.random_seed = }")
         elif self.random_seed is not None:
             kwargs["random_seed"] = self.random_seed
+            logger.debug(f"[start_battle] Using {self.random_seed = }")
 
         self.current_state = Start.initialize(
             main_a=self.main_a.model_copy(deep=True),
@@ -58,6 +60,7 @@ class BattleSimulator(BaseModel):
             self.start_battle()
         while self.current_state is not None and not isinstance(self.current_state, End):
             self.current_state = self.current_state.transition()
+            assert self.current_state is not None
             assert self.current_state.round_count != 300
         logger.info(self.get_battle_result())
 
@@ -118,6 +121,10 @@ class BattleSimulator(BaseModel):
         results: BattleResults = {"combatant_a": 0, "combatant_b": 0}
         total_rounds = 0
 
+        if num_battles < 1:
+            logger.warning(f"Got {num_battles = }, thus running zero")
+            return (results, total_rounds)
+
         if not self.main_a or not self.main_b:
             logger.warning("Please load both combatants before running multiple battles.")
             if settings.is_debug():
@@ -139,12 +146,19 @@ class BattleSimulator(BaseModel):
         try:
             for _ in range(num_battles):
                 self.run_battle()
-                if self.current_state:
-                    total_rounds += self.current_state.round_count
-                    if self.current_state.combatant_a.is_dead() and not self.current_state.combatant_b.is_dead():
-                        results["combatant_b"] += 1
-                    if not self.current_state.combatant_a.is_dead() and self.current_state.combatant_b.is_dead():
-                        results["combatant_a"] += 1
+                assert self.current_state is not None
+
+                total_rounds += self.current_state.round_count
+                if self.current_state.combatant_a.is_dead() and not self.current_state.combatant_b.is_dead():
+                    results["combatant_b"] += 1
+                if not self.current_state.combatant_a.is_dead() and self.current_state.combatant_b.is_dead():
+                    results["combatant_a"] += 1
+
+                if self.random_seed is None:
+                    self.current_state.set_new_rng()
+                else:
+                    self.random_seed += 1
+                    self.current_state.set_new_rng(self.random_seed)
 
                 print(self.get_battle_result())
                 print("")
