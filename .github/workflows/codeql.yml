@@ -12,12 +12,8 @@
 name: "CodeQL Advanced"
 
 on:
-  push:
-    branches: [ "master" ]
-  pull_request:
-    branches: [ "master" ]
   schedule:
-    - cron: '0 0 1,15 * *'
+    - cron: '30 5 * * 1'
 
 jobs:
   analyze:
@@ -28,7 +24,7 @@ jobs:
     #   - https://gh.io/using-larger-runners (GitHub.com only)
     # Consider using larger runners or machines with greater resources for possible analysis time improvements.
     runs-on: ${{ (matrix.language == 'swift' && 'macos-latest') || 'ubuntu-latest' }}
-    if: github.event.pull_request.draft == false
+    # if: github.event.pull_request.draft == false
     permissions:
       # required for all workflows
       security-events: write
