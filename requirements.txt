@@ -1,7 +1,7 @@
 tomli~=2.2.1
 tomli_w~=1.1.0
 termcolor~=2.5.0
-pydantic~=2.10.4
+pydantic~=2.10.6
 pydantic-settings~=2.7.1
 pytest~=8.3.4
 coverage~=7.6.10
