@@ -110,10 +110,10 @@ class BattleSimulator(BaseModel):
         avg_rounds = total_rounds / num_battles
         logger.info(f"Battle simulation results after {num_battles} battles:")
         logger.info(
-            f"{self.main_a.name} won {results['combatant_a']} times " f"({results['combatant_a']/num_battles*100:.2f}%)"
+            f"{self.main_a.name} won {results['combatant_a']} times ({results['combatant_a'] / num_battles * 100:.2f}%)"
         )
         logger.info(
-            f"{self.main_b.name} won {results['combatant_b']} times " f"({results['combatant_b']/num_battles*100:.2f}%)"
+            f"{self.main_b.name} won {results['combatant_b']} times ({results['combatant_b'] / num_battles * 100:.2f}%)"
         )
         logger.info(f"Average number of rounds per battle: {avg_rounds:.2f}")
 

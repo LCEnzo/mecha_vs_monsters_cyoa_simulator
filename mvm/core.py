@@ -497,7 +497,7 @@ class AttackState(TurnState, ABC):
 
         if not self.is_att_type(att_type):
             logger.warning(
-                f"Trying to calculate_hit with state ({type(self)}) and att_type ({att_type})." f" Whole state: {self}"
+                f"Trying to calculate_hit with state ({type(self)}) and att_type ({att_type}). Whole state: {self}"
             )
             return False
 
