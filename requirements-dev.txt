@@ -1,6 +1,6 @@
 ruff~=0.13.2
 
-mypy~=1.15.0
+mypy~=2.1.0
 mypy-extensions
 types-PyYAML 
 types-Pygments 
